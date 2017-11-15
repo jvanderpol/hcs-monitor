@@ -1,27 +1,99 @@
 var filesystem = null;
-var imageCache = null;
+var imageCache = {};
 
 function main() {
   initImageCache();
   initFilesystem(function() {
     refreshSlideshowFromCache();
     initFacebookSdk();
-		showSlides();
+		addNextSlide();
   });
 }
 
-var slideIndex = 0;
+function getNextImage() {
+  var imageIds = Object.keys(imageCache)
+  if (imageIds.length == 0) {
+    return null;
+  }
+  var imageIndex = Math.floor(Math.random() * imageIds.length);
+  return imageCache[imageIds[imageIndex]];
+}
 
-function showSlides() {
-    var i;
-    var slides = document.getElementsByClassName("slide");
-    for (i = 0; i < slides.length; i++) {
-        slides[i].style.display = "none"; 
+function createImageSlide(image, width, height) {
+  var slideContainer = document.createElement("div");
+  slideContainer.classList.add("fade", "slide-container");
+  slideContainer.style.width = width + "px";
+  slideContainer.style.height = height + "px";
+
+  var background = document.createElement("img");
+  background.classList.add("slide-background");
+  background.src = image.url;
+
+  var imageElement = document.createElement("img");
+  imageElement.classList.add("slide-image");
+  imageElement.src = image.url;
+
+  var imageMultiplier;
+  var backgroundMultiplier;
+  var imageRatio = image.height / image.width;
+  var slideRation = height / width;
+  if (imageRatio > slideRation) {
+    imageElement.style.height = height + "px";
+    imageMultiplier = height / image.height;
+    background.style.width = width + "px";
+    backgroundMultiplier = width / image.width;
+  } else {
+    imageElement.style.width = width + "px";
+    background.style.height = height + "px";
+    imageMultiplier = width / image.width;
+    backgroundMultiplier = height / image.height;
+  }
+  imageElement.style.margin =
+    ((height - image.height * imageMultiplier) / 2) + "px " +
+    ((width - image.width * imageMultiplier) / 2) + "px";
+  var clippedVertical = (backgroundMultiplier * image.height - height) / 2;
+  var clippedHoriztonal = (backgroundMultiplier * image.width - width) / 2;
+  background.style.clipPath = "inset(" +
+    clippedVertical + "px " +
+    clippedHoriztonal + "px)";
+  background.style.top = "-" + clippedVertical + "px";
+  background.style.left = "-" + clippedHoriztonal + "px";
+
+  slideContainer.appendChild(imageElement);
+  slideContainer.appendChild(background);
+  return slideContainer
+}
+
+function showAddedSlide() {
+  var slideshowContainer = document.getElementById('slideshow-container');
+  var i;
+  var slideContainers = document.getElementsByClassName("slide-container");
+  for (i = 0; i < slideContainers.length; i++) {
+    var slide = slideContainers[i];
+    if (slide == nextSlide) {
+      slide.style.opacity = 1;
+    } else if (slide.style.opacity == 0) {
+      slideshowContainer.removeChild(slide);
+    } else {
+      slide.style.opacity = 0;
     }
-    slideIndex++;
-    if (slideIndex > slides.length) {slideIndex = 1} 
-    slides[slideIndex-1].style.display = "block"; 
-    setTimeout(showSlides, 4000);
+  }
+}
+
+var nextSlide;
+
+function addNextSlide() {
+  // This is done here to ensure the slide is actually loaded, this should probably be done with a callback
+  showAddedSlide();
+
+  var image = getNextImage();
+  if (image == null) {
+    return;
+  }
+  var slideshowContainer = document.getElementById('slideshow-container');
+  nextSlide = createImageSlide(image, slideshowContainer.offsetWidth, slideshowContainer.offsetHeight)
+  slideshowContainer.appendChild(nextSlide);
+  setTimeout(addNextSlide, 4000);
 }
 
 function initImageCache() {
@@ -34,15 +106,7 @@ function saveImageCache() {
 }
 
 function refreshSlideshowFromCache() {
-  console.log('Refreshing from ' + JSON.stringify(imageCache));
-  var slideContainer = document.getElementById('slideshow-container');
-  for (imageId in imageCache) {
-    var localImage = imageCache[imageId];
-    var imageElement = document.createElement("img");
-    imageElement.classList.add("slide", "fade");
-    imageElement.src = localImage.url;
-    document.body.appendChild(imageElement);
-  }
+  console.log('Refreshing from cache');
 }
 
 function initFilesystem(successHandler) {
@@ -61,27 +125,57 @@ function initFilesystem(successHandler) {
 
 function syncPictures() {
   console.log("syncing pictures");
-  var completedImages = 0;
-  var totalImages = 0;
-  var maybeRestart = function() {
-    completedImages++;
-    if (completedImages == totalImages) {
+  FB.api('/140475252639971/photos/uploaded', { fields: 'images,created_time,name' }, handleImageResponse);
+}
+
+function shouldFetchNextPage(response) {
+  for (var i = 0; i < response.data.length; i++) {
+    var image = response.data[i].id;
+    if (image in imageCache) {
+      //nextPage = null;
+      break;
+    }
+  }
+}
+
+function handleImageResponse(response) {
+  var maybeNextPage = response.paging && response.paging.next
+  var downloadsDone = function() {
+    if (!maybeNextPage) {
       console.log('sync done');
       saveImageCache();
       refreshSlideshowFromCache();
     }
-  };
-  FB.api('/140475252639971/photos/uploaded', { fields: 'images' }, function(response) {
-    for (var i = 0; i < response.data.length; i++) {
-      var image = response.data[i];
-      var cachedImage =  imageCache[image.id];
-      if (cachedImage && cachedImage.isLocal) {
-        continue;
-      }
-      totalImages++;
-      downloadImage(image, maybeRestart);
+  }
+  var finishedDownloads = 0;
+  var downloadedsStarted = 0;
+  var markDone = function() {
+    finishedDownloads++;
+    if (finishedDownloads == downloadedsStarted) {
+      downloadsDone();
     }
-  });
+  };
+  for (var i = 0; i < response.data.length; i++) {
+    var image = response.data[i];
+    if (new Date(image.created_time) < new Date(2016, 1, 1)) {
+      maybeNextPage = null;
+      continue;
+    }
+    var cachedImage =  imageCache[image.id];
+    if (cachedImage && cachedImage.isLocal) {
+      maybeNextPage = null;
+      continue;
+    }
+    downloadedsStarted++;
+    downloadImage(image, markDone);
+  }
+  if (downloadedsStarted == 0) {
+    downloadsDone();
+  }
+  if (maybeNextPage) {
+    console.log("Fetching nextPage");
+    FB.api(maybeNextPage, handleImageResponse);
+  }
 }
 
 function downloadImage(image, doneCallback) {
@@ -93,7 +187,10 @@ function downloadImage(image, doneCallback) {
     }
   }
   // TODO set dimensions, comments, etc.
-  var cacheEntry = {};
+  var cacheEntry = {
+    height: largestImage.height,
+    width: largestImage.width
+  };
   maybeDownload(largestImage.source, image.id,
     function(url) {
       cacheEntry.url = url;
@@ -132,7 +229,6 @@ function download(url, file, urlHandler, errorHandler) {
       if (xhr.status === 200) {
         filesystem.root.getFile(file, { create:true }, function(fileEntry) {
           fileEntry.createWriter(function(writer) {
-            console.log(xhr.response);
             writer.onwriteend = function(e) {
               urlHandler(fileEntry.toURL());
             };
