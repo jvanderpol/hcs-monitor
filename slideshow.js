@@ -1,21 +1,24 @@
 var filesystem = null;
 var imageCache = {};
+var accessToken = null;
 
 function main() {
-  initImageCache();
-  initFilesystem(function() {
-    refreshSlideshowFromCache();
-    initFacebookSdk();
-		addNextSlide();
-    showAddedSlide();
+  initImageCache(function() {
+    initFilesystem(function() {
+      initFacebook(function() {
+        syncPictures();
+      });
+      addNextSlide();
+      showAddedSlide();
+    });
+    document.body.onclick = function() { requestFullScreen(document.body); }
   });
-  document.body.onclick = function() { requestFullScreen(document.body); }
 }
 
 function requestFullScreen(element) {
   var fullScreenMethod = element.requestFullScreen || element.webkitRequestFullScreen;
   if (fullScreenMethod) {
-    fullScreenMethod.call(element);
+    //fullScreenMethod.call(element);
   }
 }
 
@@ -28,6 +31,8 @@ function getNextImage() {
   return imageCache[imageIds[imageIndex]];
 }
 
+var nextZIndex = 0;
+
 function createImageSlide(image, width, height) {
   var slideContainer = document.createElement("div");
   slideContainer.classList.add("fade", "slide-container");
@@ -37,10 +42,12 @@ function createImageSlide(image, width, height) {
   var background = document.createElement("img");
   background.classList.add("slide-background");
   background.src = image.url;
+  background.zIndex = nextZIndex++;
 
   var imageElement = document.createElement("img");
   imageElement.classList.add("slide-image");
   imageElement.src = image.url;
+  imageElement.zIndex = nextZIndex++;
 
   var imageMultiplier;
   var backgroundMultiplier;
@@ -95,26 +102,23 @@ function addNextSlide() {
   showAddedSlide();
 
   var image = getNextImage();
-  if (image == null) {
-    return;
+  if (image != null) {
+    var slideshowContainer = document.getElementById('slideshow-container');
+    nextSlide = createImageSlide(image, slideshowContainer.offsetWidth, slideshowContainer.offsetHeight)
+    slideshowContainer.appendChild(nextSlide);
   }
-  var slideshowContainer = document.getElementById('slideshow-container');
-  nextSlide = createImageSlide(image, slideshowContainer.offsetWidth, slideshowContainer.offsetHeight)
-  slideshowContainer.appendChild(nextSlide);
   setTimeout(addNextSlide, 4000);
 }
 
-function initImageCache() {
-  //window.localStorage.setItem('images', '{}');
-  imageCache = JSON.parse(window.localStorage.getItem('images') || "{}");
+function initImageCache(callback) {
+  chrome.storage.local.get({imageCache: {}}, function(items) {
+    imageCache = items.imageCache
+    callback();
+  });
 }
 
 function saveImageCache() {
-  window.localStorage.setItem('images', JSON.stringify(imageCache));
-}
-
-function refreshSlideshowFromCache() {
-  console.log('Refreshing from cache');
+  chrome.storage.local.set({imageCache: imageCache})
 }
 
 function initFilesystem(successHandler) {
@@ -133,26 +137,15 @@ function initFilesystem(successHandler) {
 
 function syncPictures() {
   console.log("syncing pictures");
-  FB.api('/140475252639971/photos/uploaded', { fields: 'images,created_time,name' }, handleImageResponse);
-}
-
-function shouldFetchNextPage(response) {
-  for (var i = 0; i < response.data.length; i++) {
-    var image = response.data[i].id;
-    if (image in imageCache) {
-      //nextPage = null;
-      break;
-    }
-  }
+  facebookGraphCall({path:'/140475252639971/photos/uploaded', fields:'images,created_time,name'}, handleImageResponse);
 }
 
 function handleImageResponse(response) {
-  var maybeNextPage = response.paging && response.paging.next
+  var nextPageToRequest = response.paging && response.paging.next
   var downloadsDone = function() {
-    if (!maybeNextPage) {
+    if (!nextPageToRequest) {
       console.log('sync done');
       saveImageCache();
-      refreshSlideshowFromCache();
     }
   }
   var finishedDownloads = 0;
@@ -166,12 +159,12 @@ function handleImageResponse(response) {
   for (var i = 0; i < response.data.length; i++) {
     var image = response.data[i];
     if (new Date(image.created_time) < new Date(2016, 1, 1)) {
-      maybeNextPage = null;
+      nextPageToRequest = null;
       continue;
     }
     var cachedImage =  imageCache[image.id];
-    if (cachedImage && cachedImage.isLocal) {
-      maybeNextPage = null;
+    if (cachedImage) {
+      nextPageToRequest = null;
       continue;
     }
     downloadedsStarted++;
@@ -180,9 +173,9 @@ function handleImageResponse(response) {
   if (downloadedsStarted == 0) {
     downloadsDone();
   }
-  if (maybeNextPage) {
+  if (nextPageToRequest) {
     console.log("Fetching nextPage");
-    FB.api(maybeNextPage, handleImageResponse);
+    facebookGraphCall({url:nextPageToRequest}, handleImageResponse);
   }
 }
 
@@ -194,7 +187,6 @@ function downloadImage(image, doneCallback) {
       largestImage = imageSource;
     }
   }
-  // TODO set dimensions, comments, etc.
   var cacheEntry = {
     height: largestImage.height,
     width: largestImage.width
@@ -202,22 +194,18 @@ function downloadImage(image, doneCallback) {
   maybeDownload(largestImage.source, image.id,
     function(url) {
       cacheEntry.url = url;
-      cacheEntry.isLocal = true;
       imageCache[image.id] = cacheEntry;
       doneCallback();
     },
     function(e) {
       globalErrorHandler(e);
-      cacheEntry.url = largestImage.source;
-      cacheEntry.isLocal = false;
-      imageCache[image.id] = cacheEntry;
       doneCallback();
     });
 }
 
 function maybeDownload(url, file, urlHandler, errorHandler) {
   if (!filesystem) {
-    return url;
+    errorHandler("filesystem isn't yet initialized");
   }
   filesystem.root.getFile(file, { create:false },
     function(fileEntry) {
@@ -253,41 +241,75 @@ function download(url, file, urlHandler, errorHandler) {
   return xhr;
 };
 
-function tryLogin() {
-  FB.getLoginStatus(function(response) {
-    if (response.status === 'connected') {
-      syncPictures();
+function initFacebook(callback) {
+  chrome.storage.local.get({accessToken: null}, function(items) {
+    if (items.accessToken) {
+      setAccessToken(items.accessToken);
+      callback();
     } else {
-      FB.login(function(response) { syncPictures() });
+      facebookLogin(callback);
     }
-  });
+  })
 }
 
-window.fbAsyncInit = function() {
-  FB.init({
-    appId      : '1967886200146564',
-    cookie     : true,  // enable cookies to allow the server to access 
-                        // the session
-    xfbml      : true,  // parse social plugins on this page
-    version    : 'v2.8' // use graph api version 2.8
-  });
-  tryLogin();
+function setAccessToken(localAccessToken) {
+  accessToken = localAccessToken;
+  chrome.storage.local.set({accessToken: accessToken})
+}
+
+function facebookLogin(callback) {
+  var redirect_url = 'https://www.facebook.com/connect/login_success.html';
+  updateListener = function(tabId, changeInfo, tab) {
+    if (changeInfo.url) {
+      var params = changeInfo.url.split('#')[1];
+      var accessToken = params.split('&')[0].split('=')[1];
+      console.log("Got new accessToken: " + accessToken);
+      setAccessToken(accessToken);
+      chrome.storage.local.set({accessToken: accessToken})
+      chrome.tabs.onUpdated.removeListener(updateListener);
+      if (tab.id) {
+        chrome.tabs.remove(tab.id);
+      }
+      callback();
+    }
+  };
+  chrome.tabs.onUpdated.addListener(updateListener);
+
+  chrome.windows.create(
+    {
+      url:"https://www.facebook.com/dialog/oauth?client_id=198951587317971&response_type=token&scope=email&redirect_uri=" + redirect_url
+    });
 };
 
-function initFacebookSdk() {
-  var s = 'script';
-  var id = 'facebook-jssdk';
-  console.log("loading facebook sdk");
-  var js, fjs = document.getElementsByTagName(s)[0];
-  if (document.getElementById(id)) return;
-  js = document.createElement(s); js.id = id;
-  js.src = "//connect.facebook.net/en_US/sdk.js";
-  fjs.parentNode.insertBefore(js, fjs);
-};
+function facebookGraphCall(options, callback) {
+  var xhr = new XMLHttpRequest();
+  var url;
+  if (options.url) {
+    url = options.url
+  } else {
+    url = "https://graph.facebook.com" + options.path + "?fields=" + (options.fields || "") + "&access_token=" + accessToken;
+  }
+  xhr.open("GET",  url, true);
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState == 4) {
+      if (xhr.status == 400) {
+        facebookLogin(function() {
+          facebookGraphCall(options, callback);
+        });
+      } else {
+        var response = JSON.parse(xhr.responseText);
+        callback(response);
+      }
+    }
+  }
+  xhr.send();
+}
 
 function globalErrorHandler(error) {
-  console.log('unknown error ' + error);
-  return;
+  if (!error || !error.code) {
+    console.log('unknown error ' + error);
+    return;
+  }
   var message = '';
 
   switch (error.code) {
@@ -312,3 +334,5 @@ function globalErrorHandler(error) {
   }
   console.log(message);
 }
+
+window.onload = main
