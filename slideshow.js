@@ -2,7 +2,7 @@ var filesystem = null;
 var imageCache = {};
 var accessToken = null;
 
-function main() {
+window.onload = function() {
   initImageCache(function() {
     initFilesystem(function() {
       initFacebook(function() {
@@ -334,5 +334,3 @@ function globalErrorHandler(error) {
   }
   console.log(message);
 }
-
-window.onload = main
