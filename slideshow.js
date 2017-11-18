@@ -7,7 +7,16 @@ function main() {
     refreshSlideshowFromCache();
     initFacebookSdk();
 		addNextSlide();
+    showAddedSlide();
   });
+  document.body.onclick = function() { requestFullScreen(document.body); }
+}
+
+function requestFullScreen(element) {
+  var fullScreenMethod = element.requestFullScreen || element.webkitRequestFullScreen;
+  if (fullScreenMethod) {
+    fullScreenMethod.call(element);
+  }
 }
 
 function getNextImage() {
@@ -66,9 +75,8 @@ function createImageSlide(image, width, height) {
 
 function showAddedSlide() {
   var slideshowContainer = document.getElementById('slideshow-container');
-  var i;
   var slideContainers = document.getElementsByClassName("slide-container");
-  for (i = 0; i < slideContainers.length; i++) {
+  for (var i = 0; i < slideContainers.length; i++) {
     var slide = slideContainers[i];
     if (slide == nextSlide) {
       slide.style.opacity = 1;

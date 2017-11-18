@@ -5,11 +5,24 @@ body, html {
   right: 0;
 }
 
+#logo-holder {
+  display: block;
+  height: 15%;
+  width: 100%;
+  border:1px solid #021a40;
+}
+
+#logo {
+  display: block;
+  height: 100%;
+  margin: auto;
+}
+
 #slideshow-container {
   position: absolute;
   left: 20%;
   width: 80%;
-  height: 100%;
+  height: 85%;
 }
 
 .slide-container {
