@@ -1,5 +1,7 @@
 var filesystem = null;
 var imageCache = {};
+var buckettedImageCache = [];
+var latestImageCacheVersion = "0.1";
 var accessToken = null;
 
 window.addEventListener("load", function() {
@@ -11,24 +13,21 @@ window.addEventListener("load", function() {
       addNextSlide();
       showAddedSlide();
     });
-    document.body.onclick = function() { requestFullScreen(document.body); }
   });
 });
 
-function requestFullScreen(element) {
-  var fullScreenMethod = element.requestFullScreen || element.webkitRequestFullScreen;
-  if (fullScreenMethod) {
-    //fullScreenMethod.call(element);
-  }
-}
-
 function getNextImage() {
-  var imageIds = Object.keys(imageCache)
-  if (imageIds.length == 0) {
-    return null;
+  var bucketIndex = Math.random();
+  for (var i = 0; i < buckettedImageCache.length; i++) {
+    var bucket = buckettedImageCache[i];
+    if (bucket.min < bucketIndex && bucket.max > bucketIndex) {
+      var imageIndex = Math.random();
+      var imageIndex = Math.floor(Math.random() * bucket.images.length);
+      var imageId = bucket.images[imageIndex];
+      return imageCache.images[imageId];
+    }
   }
-  var imageIndex = Math.floor(Math.random() * imageIds.length);
-  return imageCache[imageIds[imageIndex]];
+  return null;
 }
 
 var nextZIndex = 0;
@@ -112,13 +111,58 @@ function addNextSlide() {
 
 function initImageCache(callback) {
   chrome.storage.local.get({imageCache: {}}, function(items) {
-    imageCache = items.imageCache
+    if (items.imageCache.version == latestImageCacheVersion) {
+      imageCache = items.imageCache
+    } else {
+      imageCache = {version: latestImageCacheVersion, images: {}}
+    }
+    bucketImageCache();
     callback();
   });
 }
 
 function saveImageCache() {
   chrome.storage.local.set({imageCache: imageCache});
+  bucketImageCache();
+}
+
+function bucketImageCache() {
+  var now = new Date();
+  var threeWeeksAgo = daysAgo(now, 21);
+  var threeMonthsAgo = daysAgo(now, 90);
+  var veryRecent = [];
+  var kindaRecent = [];
+  var theRest = [];
+  Object.keys(imageCache.images).forEach(function(imageId) {
+    var image = imageCache.images[imageId];
+    var imageCreationTime = new Date(image.createdTime);
+    if (imageCreationTime > threeWeeksAgo) {
+      veryRecent.push(imageId);
+    } else if (imageCreationTime > threeMonthsAgo) {
+      kindaRecent.push(imageId);
+    } else {
+      theRest.push(imageId);
+    }
+  });
+  var buckets = [];
+  var nextMin = 0;
+  var maybePush = function(bucket, nextBucket, requiredLength, max) {
+    if (bucket.length > requiredLength) {
+      buckets.push({
+        min: nextMin,
+        max: max,
+        images: bucket
+      });
+      nextMin = max;
+      return nextBucket;
+    } else {
+      return nextBucket.concat(bucket);
+    }
+  };
+  kindaRecent = maybePush(veryRecent, kindaRecent, 30, 0.5);
+  theRest = maybePush(kindaRecent, theRest, 60, 0.8);
+  maybePush(theRest, [], 0, 1);
+  buckettedImageCache = buckets;
 }
 
 function initFilesystem(successHandler) {
@@ -140,6 +184,14 @@ function syncPictures() {
   facebookGraphCall({path:'/140475252639971/photos/uploaded', fields:'images,created_time,name'}, handleImageResponse);
 }
 
+function daysAgo(date, days) {
+  var result = new Date(date);
+  result.setDate(result.getDate() - days);
+  return result;
+}
+
+var twoYearsAgo = daysAgo(new Date(), 365 * 2);
+
 function handleImageResponse(response) {
   var nextPageToRequest = response.paging && response.paging.next
   var downloadsDone = function() {
@@ -158,11 +210,11 @@ function handleImageResponse(response) {
   };
   for (var i = 0; i < response.data.length; i++) {
     var image = response.data[i];
-    if (new Date(image.created_time) < new Date(2016, 1, 1)) {
+    if (new Date(image.created_time) < twoYearsAgo) {
       nextPageToRequest = null;
       continue;
     }
-    var cachedImage =  imageCache[image.id];
+    var cachedImage =  imageCache.images[image.id];
     if (cachedImage) {
       nextPageToRequest = null;
       continue;
@@ -174,7 +226,11 @@ function handleImageResponse(response) {
     downloadsDone();
   }
   if (nextPageToRequest) {
-    console.log("Fetching nextPage");
+    var lastDate = "empty";
+    if (response.data.length > 0) {
+      lastDate = response.data[response.data.length - 1].created_time;
+    }
+    console.log("Fetching nextPage, last image date: " + lastDate);
     facebookGraphCall({url:nextPageToRequest}, handleImageResponse);
   }
 }
@@ -188,13 +244,14 @@ function downloadImage(image, doneCallback) {
     }
   }
   var cacheEntry = {
+    createdTime: image.created_time,
     height: largestImage.height,
     width: largestImage.width
   };
   maybeDownload(largestImage.source, image.id,
     function(url) {
       cacheEntry.url = url;
-      imageCache[image.id] = cacheEntry;
+      imageCache.images[image.id] = cacheEntry;
       doneCallback();
     },
     function(e) {

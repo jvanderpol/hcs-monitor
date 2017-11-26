@@ -90,14 +90,15 @@ var weatherIcons = {
 }
 
 function updateWeatherIcon(iconId, condition) {
-  console.log(condition);
   var iconElement = document.getElementById(iconId);
   if (iconElement) {
     var iconUrl;
-    if (condition.code in weatherIcons) {
+    if (weatherIcons[condition.code]) {
       iconUrl = 'weather-icons/icons/black/svg/' + weatherIcons[condition.code] + '.svg';
-    } else {
+    } else if (condition.icon) {
       iconUrl = 'http:' + condition.icon;
+    } else {
+      iconUrl = 'weather-icons/icons/black/svg/unknown.svg';
     }
     iconElement.src = iconUrl;
   }
@@ -106,6 +107,8 @@ function updateWeatherIcon(iconId, condition) {
 function handleWeatherRespone(response) {
   document.getElementById('weather-current-temp').innerText = formatTemp(response.current.temp_f);
   updateWeatherIcon('weather-current-icon', response.current.condition);
+  var foundRecess1 = false;
+  var foundRecess2 = false;
   for (var i = 0; i < response.forecast.forecastday.length; i++) {
     var day = response.forecast.forecastday[i];
     for (var j = 0; j < day.hour.length; j++) {
@@ -114,10 +117,20 @@ function handleWeatherRespone(response) {
       if (time.getHours() == 10) {
         document.getElementById('weather-recess-1-temp').innerText = formatTemp(hour.temp_f);
         updateWeatherIcon('weather-recess-1-icon', hour.condition);
+        foundRecess1 = true;
       } else if (time.getHours() == 14) {
         document.getElementById('weather-recess-2-temp').innerText = formatTemp(hour.temp_f);
         updateWeatherIcon('weather-recess-2-icon', hour.condition);
+        foundRecess2 = true;
     }
     }
+  }
+  if (!foundRecess1) {
+    document.getElementById('weather-recess-1-temp').innerText = "?";
+    updateWeatherIcon('weather-recess-1-icon', -1);
+  }
+  if (!foundRecess2) {
+    document.getElementById('weather-recess-2-temp').innerText = "?";
+    updateWeatherIcon('weather-recess-2-icon', -1);
   }
 }
