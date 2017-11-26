@@ -2,11 +2,34 @@
 <html>
   <head>
     <script src="slideshow.js"></script>
+    <script src="weather.js"></script>
+    <link href='http://fonts.googleapis.com/css?family=Roboto' rel='stylesheet' type='text/css'>
     <link rel="stylesheet" type="text/css" href="slideshow.css">
+    <link rel="stylesheet" type="text/css" href="weather.css">
   </head>
   <body>
     <div id="logo-holder">
       <img src="logo.png" alt="logo" id="logo" />
+    </div>
+    <div id="info-container">
+      <div id="weather-container">
+        <h2>Current</h2>
+        <div class="weather-current">
+          <img id="weather-current-icon" src="weather-icons/icons/black/svg/unknown.svg" alt="weather-icon" />
+          <p id="weather-current-temp"></p>
+        </div>
+        <h2>Recesses</h2>
+        <div class="weather-recess" id="weather-recess-1">
+          <h3>1<sup>st</sup></h3>
+          <img id="weather-recess-1-icon" src="weather-icons/icons/black/svg/unknown.svg" alt="weather-icon" />
+          <p id="weather-recess-1-temp"></p>
+        </div>
+        <div class="weather-recess">
+          <h3>2<sup>nd</sup></h3>
+          <img id="weather-recess-2-icon" src="weather-icons/icons/black/svg/unknown.svg" alt="weather-icon" />
+          <p id="weather-recess-2-temp"></p>
+        </div>
+      </div>
     </div>
     <div id="slideshow-container" />
   </body>

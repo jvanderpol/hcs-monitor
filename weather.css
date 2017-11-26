@@ -1,0 +1,57 @@
+#info-container {
+  width: 20%;
+  height: 100%;
+  float: left;
+  background: url(bg-light.png) repeat;
+  color: #0072B0;
+}
+
+#weather-container {
+  font-family: 'Roboto', sans-serif;
+  text-align: center;
+}
+
+#weather-container h2 {
+  color: white;
+  background-color: #0072B0;
+  padding: 5px 0;
+  margin: 0 0;
+}
+
+#weather-container h3 {
+  margin: 10px 0 0 0;
+}
+
+.weather-current img {
+  height: 60%;
+  width: 60%;
+  margin: auto;
+  transform:scale(1.2);
+}
+
+.weather-current p {
+  font-size: 70px;
+  margin: 0 0 10px 0;
+}
+
+.weather-recess {
+  width: 49%;
+  float: left;
+}
+
+#weather-recess-1 {
+  border-right-style: solid;
+  border-right-width: thin;
+}
+
+.weather-recess p {
+  font-size: 35px;
+  margin: 0;
+}
+
+.weather-recess img {
+  height: 70%;
+  width: 70%;
+  margin: auto;
+  transform:scale(1.2);
+}

@@ -2,7 +2,7 @@ var filesystem = null;
 var imageCache = {};
 var accessToken = null;
 
-window.onload = function() {
+window.addEventListener("load", function() {
   initImageCache(function() {
     initFilesystem(function() {
       initFacebook(function() {
@@ -13,7 +13,7 @@ window.onload = function() {
     });
     document.body.onclick = function() { requestFullScreen(document.body); }
   });
-}
+});
 
 function requestFullScreen(element) {
   var fullScreenMethod = element.requestFullScreen || element.webkitRequestFullScreen;
@@ -118,7 +118,7 @@ function initImageCache(callback) {
 }
 
 function saveImageCache() {
-  chrome.storage.local.set({imageCache: imageCache})
+  chrome.storage.local.set({imageCache: imageCache});
 }
 
 function initFilesystem(successHandler) {
