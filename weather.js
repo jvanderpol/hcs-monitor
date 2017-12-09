@@ -1,26 +1,12 @@
-var apiKeys;
-
 window.addEventListener("load", function() {
   initApiKeys(refreshWeather);
 });
 
-function initApiKeys(callback) {
-  chrome.storage.local.get({apiKeys: {}}, function(items) {
-    apiKeys = items.apiKeys;
-    callback();
-  });
-}
-
-function saveApiKeys() {
-  chrome.storage.local.set({apiKeys: apiKeys});
-}
-
 function refreshWeather() {
-  if (!apiKeys["apixu"]) {
-    console.log('apixu keys not stored in apiKeys, run the following to update:\napiKeys.apixu = "your_api_key";\nsaveApiKeys();');
-  } else {
+  var apixuKey = getKey("apixu");
+  if (apixuKey) {
     var xhr = new XMLHttpRequest();
-    var url = "http://api.apixu.com/v1/forecast.json?key=" + apiKeys.apixu + "&q=46322&days=1";
+    var url = "http://api.apixu.com/v1/forecast.json?key=" + apixuKey + "&q=46322&days=1";
     xhr.open("GET",  url, true);
     xhr.onreadystatechange = function() {
       if (xhr.readyState == 4) {
@@ -43,7 +29,7 @@ var weatherIcons = {
   1003: 'partlycloudy', // partly cloudy
   1006: 'cloudy', // cloudy
   1009: 'cloudy', // overcast
-  1030: 'mist', // mist
+  1030: 'fog', // mist
   1063: 'chancerain', // patchy rain possible
   1066: 'chanceflurries', // patchy snow possible
   1069: 'chancesleet', // patchy sleet possible

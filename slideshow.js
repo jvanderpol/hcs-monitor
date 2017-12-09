@@ -1,7 +1,7 @@
 var filesystem = null;
 var imageCache = {};
 var buckettedImageCache = [];
-var latestImageCacheVersion = "0.1";
+var latestImageCacheVersion = "0.2";
 var accessToken = null;
 
 window.addEventListener("load", function() {
@@ -16,14 +16,30 @@ window.addEventListener("load", function() {
   });
 });
 
+function chooseBucket(buckets) {
+  var totalWeight = 0;
+  var passedWeight = 0;
+  buckets.forEach(function (bucket) { totalWeight += bucket.weight });
+  var rand = Math.random();
+  for (var i = 0; i < buckets.length; i++) {
+    var bucket = buckets[i];
+    passedWeight += bucket.weight;
+    if (rand < passedWeight / totalWeight) {
+      return bucket;
+    }
+  }
+  return null;
+}
+
 function getNextImage() {
   var bucketIndex = Math.random();
-  for (var i = 0; i < buckettedImageCache.length; i++) {
-    var bucket = buckettedImageCache[i];
-    if (bucket.min < bucketIndex && bucket.max > bucketIndex) {
+  var firstBucket = chooseBucket(buckettedImageCache);
+  if (firstBucket) {
+    var secondBucket = chooseBucket(firstBucket.values);
+    if (secondBucket) {
       var imageIndex = Math.random();
-      var imageIndex = Math.floor(Math.random() * bucket.images.length);
-      var imageId = bucket.images[imageIndex];
+      var imageIndex = Math.floor(Math.random() * secondBucket.values.length);
+      var imageId = secondBucket.values[imageIndex];
       return imageCache.images[imageId];
     }
   }
@@ -127,13 +143,46 @@ function saveImageCache() {
 }
 
 function bucketImageCache() {
+  datedBuckets = bucketImagesByDate(Object.keys(imageCache.images));
+  datedBuckets.forEach(function (bucket) { bucket.values = bucketImageByFaces(bucket.values) });
+  buckettedImageCache = datedBuckets;
+}
+
+function bucketImageByFaces(imageIds) {
+  var withFaces = imageIds;
+  var withoutFaces = [];
+  imageIds.forEach(function (imageId) {
+    var image = imageCache.images[imageId];
+    if (image.facialScoreData) {
+      console.log(image.facialScoreData);
+    }
+    if (image.facialScoreData && image.facialScoreData.length == 0) {
+      withoutFaces.push(imageId);
+    } else {
+      withFaces.push(imageId);
+    }
+  });
+  return maybeMergeBuckets([
+    {
+      weight: 0.8,
+      values: withFaces,
+      minLength: 20
+    },
+    {
+      weight: 0.2,
+      values: withoutFaces,
+      minLength: 0
+    }]);
+}
+
+function bucketImagesByDate(imageIds) {
   var now = new Date();
   var threeWeeksAgo = daysAgo(now, 21);
   var threeMonthsAgo = daysAgo(now, 90);
   var veryRecent = [];
   var kindaRecent = [];
   var theRest = [];
-  Object.keys(imageCache.images).forEach(function(imageId) {
+  imageIds.forEach(function(imageId) {
     var image = imageCache.images[imageId];
     var imageCreationTime = new Date(image.createdTime);
     if (imageCreationTime > threeWeeksAgo) {
@@ -144,25 +193,47 @@ function bucketImageCache() {
       theRest.push(imageId);
     }
   });
-  var buckets = [];
-  var nextMin = 0;
-  var maybePush = function(bucket, nextBucket, requiredLength, max) {
-    if (bucket.length > requiredLength) {
-      buckets.push({
-        min: nextMin,
-        max: max,
-        images: bucket
-      });
-      nextMin = max;
-      return nextBucket;
-    } else {
-      return nextBucket.concat(bucket);
+  return maybeMergeBuckets([
+    {
+      weight: 0.7,
+      values: veryRecent,
+      minLength: 30
+    },
+    {
+      weight: 0.2,
+      values: kindaRecent,
+      minLength: 60
+    },
+    {
+      weight: 0.1,
+      values: theRest,
+      minLength: 0
     }
-  };
-  kindaRecent = maybePush(veryRecent, kindaRecent, 30, 0.5);
-  theRest = maybePush(kindaRecent, theRest, 60, 0.8);
-  maybePush(theRest, [], 0, 1);
-  buckettedImageCache = buckets;
+  ])
+}
+
+function maybeMergeBuckets(buckets) {
+  var mergedBuckets = [];
+  var carryOverValues = [];
+  var carryOverWeight = 0;
+  buckets.forEach(function (bucket, index) {
+    var mergedBucketValues = bucket.values.concat(carryOverValues);
+    if (mergedBucketValues.length > bucket.minLength ||
+         (index == buckets.length - 1 && mergedBucketValues.length > 0)) {
+      var min = 0;
+      mergedBuckets.forEach(function (bucket) { min = Math.max(min, bucket.max); })
+      mergedBuckets.push({
+        weight: bucket.weight + carryOverWeight,
+        values: mergedBucketValues
+      });
+      carryOverValues = [];
+      carryOverWeight = 0;
+    } else {
+      carryOverValues = mergedBucketValues;
+      carryOverWeight += bucket.weight;
+    }
+  });
+  return mergedBuckets;
 }
 
 function initFilesystem(successHandler) {
@@ -184,6 +255,11 @@ function syncPictures() {
   facebookGraphCall({path:'/140475252639971/photos/uploaded', fields:'images,created_time,name'}, handleImageResponse);
 }
 
+function doneSyncing() {
+  updateFaceScores();
+  saveImageCache();
+}
+
 function daysAgo(date, days) {
   var result = new Date(date);
   result.setDate(result.getDate() - days);
@@ -197,7 +273,7 @@ function handleImageResponse(response) {
   var downloadsDone = function() {
     if (!nextPageToRequest) {
       console.log('sync done');
-      saveImageCache();
+      doneSyncing();
     }
   }
   var finishedDownloads = 0;
@@ -243,15 +319,16 @@ function downloadImage(image, doneCallback) {
       largestImage = imageSource;
     }
   }
-  var cacheEntry = {
+  var cachedEntry = {
     createdTime: image.created_time,
     height: largestImage.height,
-    width: largestImage.width
+    width: largestImage.width,
+    remoteUrl: largestImage.source
   };
   maybeDownload(largestImage.source, image.id,
     function(url) {
-      cacheEntry.url = url;
-      imageCache.images[image.id] = cacheEntry;
+      cachedEntry.url = url;
+      imageCache.images[image.id] = cachedEntry;
       doneCallback();
     },
     function(e) {
@@ -296,7 +373,93 @@ function download(url, file, urlHandler, errorHandler) {
   };
   xhr.send();
   return xhr;
-};
+}
+
+function updateFaceScores() {
+  updateFaceScoreWithWaiting(Object.keys(imageCache.images), saveImageCache);
+}
+
+var API_CALLS_PER_MINUTE = 5;
+function updateFaceScoreWithWaiting(keys, callback) {
+  var completedCalls = 0;
+  var pendingCalls = 0;
+  var lastGroup = keys.length <= API_CALLS_PER_MINUTE;
+  var checkCompletedCallback = function() {
+    completedCalls++;
+    if (completedCalls == pendingCalls) {
+      saveImageCache();
+    }
+  }
+  var imageIndex;
+  for (imageIndex = 0; imageIndex < keys.length; imageIndex++) {
+    var image = imageCache.images[keys[imageIndex]];
+    if (!image.facialScoreData && (!image.facialScoreDataError || image.facialScoreDataError.length < 5)) {
+      updateFaceScore(image, checkCompletedCallback);
+      pendingCalls++;
+      if (pendingCalls == API_CALLS_PER_MINUTE) {
+        break;
+      }
+    }
+  }
+  if (imageIndex < keys.length) {
+    var callAgain = function() {
+      updateFaceScoreWithWaiting(keys.slice(pendingCalls));
+    };
+    setTimeout(callAgain, 60000);
+  }
+}
+
+function updateFaceScore(image, callback) {
+  callFacesApi(
+    image.remoteUrl,
+    function(scoreData) {
+      image.facialScoreData = scoreData;
+      callback();
+    },
+    function(error) {
+      console.log(image.remoteUrl + ": " + error);
+      if (!image.facialScoreDataError) {
+        image.facialScoreDataError = [];
+      }
+      image.facialScoreDataError.push(error);
+    });
+}
+
+function callFacesApi(imageUrl, scoreCallback, errorCallback) {
+  var subscriptionKey = getKey('microsoft-cognitive-services');//"13hc77781f7e4b19b5fcdd72a8df7156";
+  if (!subscriptionKey) {
+    errorCallback('invalidKey')
+    return;
+  }
+  var uriBase = "https://westcentralus.api.cognitive.microsoft.com/face/v1.0/detect";
+
+  // Request parameters.
+  var params = {
+    "returnFaceAttributes": "age,smile,emotion,blur,exposure,noise",
+  };
+  $.ajax({
+    url: uriBase + "?" + $.param(params),
+    beforeSend: function(xhrObj){
+        xhrObj.setRequestHeader("Content-Type","application/json");
+        xhrObj.setRequestHeader("Ocp-Apim-Subscription-Key", subscriptionKey);
+    },
+    type: "POST",
+    data: '{"url": "' + imageUrl + '"}',
+  })
+
+  .done(function(data) {
+    scoreCallback(data);
+  })
+
+  .fail(function(jqXHR, textStatus, errorThrown) {
+    var errorString = "textStatus:" + textStatus +
+      " errorThrown: " + errorThrown +
+      " jqXHR.status: " + jqXHR.status +
+      " jqXHR.responseText: " + jqXHR.responseText;
+    errorCallback(errorString);
+  });
+}
+
 
 function initFacebook(callback) {
   chrome.storage.local.get({accessToken: null}, function(items) {
