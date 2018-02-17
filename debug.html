@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="debug.js"></script>
+    <script src="image_cache.js"></script>
+    <script src="jquery.js"></script>
+    <script src="keys.js"></script>
+    <script src="mustache.js"></script>
+    <script id="bucketRowTemplate" type="x-tmpl-mustache">
+      <tr style="background-color:grey">
+        <td colspan=2>
+          <ul>
+            <li>weight: {{weight}}</li>
+            <li>timeBucketWeight: {{timeBucketWeight}}</li>
+            <li>faceBucketWeight: {{faceBucketWeight}}</li>
+            <li>imageCount: {{imageCount}}</li>
+          </ul>
+        </td>
+      </tr>
+    </script>
+    <script id="imageRowTemplate" type="x-tmpl-mustache">
+      <tr>
+        <td>
+          <img src="{{imageUrl}}" alt="localImage" height=200, width=200 />
+        </td>
+        <td>
+          <pre>{{debugInfo}}</pre>
+        </td>
+      </tr>
+    </script>
+  </head>
+  <body>
+    <table id="imageTable" />
+  </body>
+</html>

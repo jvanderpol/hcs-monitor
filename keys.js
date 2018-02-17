@@ -1,10 +1,14 @@
 var apiKeys;
 
 function initApiKeys(callback) {
-  chrome.storage.local.get({apiKeys: {}}, function(items) {
-    apiKeys = items.apiKeys;
+  if (apiKeys) {
     callback();
-  });
+  } else {
+    chrome.storage.local.get({apiKeys: {}}, function(items) {
+      apiKeys = items.apiKeys;
+      callback();
+    });
+  }
 }
 
 function saveApiKeys() {
