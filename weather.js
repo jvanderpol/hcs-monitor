@@ -1,23 +1,57 @@
+var latestForecastCacheVersion = "0.1";
+var weatherCache = {};
+
 window.addEventListener("load", function() {
-  initApiKeys(refreshWeather);
+  initForecastCache(function() {
+    initApiKeys(refreshWeather);
+  });
 });
 
-function refreshWeather() {
-  var apixuKey = getKey("apixu");
-  if (apixuKey) {
-    var xhr = new XMLHttpRequest();
-    var url = "http://api.apixu.com/v1/forecast.json?key=" + apixuKey + "&q=46322&days=1";
-    xhr.open("GET",  url, true);
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState == 4) {
-        var response = JSON.parse(xhr.responseText);
-        handleWeatherRespone(response);
-      }
+function initForecastCache(callback) {
+  chrome.storage.local.get({weatherCache: {}}, function(items) {
+    if (items.weatherCache.version == latestForecastCacheVersion) {
+      weatherCache = items.weatherCache
+    } else {
+      weatherCache = {version: latestForecastCacheVersion, forecast: {}, current: {}}
     }
-    xhr.send();
-    // Refresh every 5 minutes
-    setTimeout(refreshWeather, 5 * 60000);
+    callback();
+  });
+}
+
+function saveForecastCache() {
+  chrome.storage.local.set({weatherCache: weatherCache});
+}
+
+function refreshWeather() {
+  var weatherUndergroundKey = getKey("weather-underground");
+  if (weatherUndergroundKey) {
+    $.ajax({
+      url: "http://api.wunderground.com/api/" + weatherUndergroundKey + "/conditions/q/IN/46322.json"
+    })
+      .done(handleWeatherUndergroundConditionsResponse)
+      .fail(logAjaxError);
+    $.ajax({
+      url: "http://api.wunderground.com/api/" + weatherUndergroundKey + "/hourly/q/IN/46322.json"
+    })
+      .done(handleWeatherUndergroundHourlyResponse)
+      .fail(logAjaxError);
+  } else {
+    var apixuKey = getKey("apixu");
+    if (apixuKey) {
+      var xhr = new XMLHttpRequest();
+      var url = "http://api.apixu.com/v1/forecast.json?key=" + apixuKey + "&q=46322&days=1";
+      xhr.open("GET",  url, true);
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState == 4) {
+          var response = JSON.parse(xhr.responseText);
+          handleApixuWeatherResponse(response);
+        }
+      }
+      xhr.send();
+    }
   }
+  // Refresh every 5 minutes
+  setTimeout(refreshWeather, 5 * 60000);
 }
 
 function formatTemp(temp) {
@@ -73,16 +107,41 @@ var weatherIcons = {
   1276: 'tstorms', // Moderate or heavy rain with thunder
   1279: 'chancetstorms', // Patchy light snow with thunder
   1282: 'tstorms', // Moderate or heavy snow with thunder
+
+  // Weather underground
+  'chanceflurries': 'chanceflurries',
+  'chancerain': 'chancerain',
+  'chancesleet': 'chancesleet',
+  'chancesnow': 'chancesnow',
+  'chancetstorms': 'chancetstorms',
+  'clear': 'clear',
+  'cloudy': 'cloudy',
+  'flurries': 'flurries',
+  'fog': 'fog',
+  'hazy': 'hazy',
+  'mostlycloudy': 'mostlycloudy',
+  'mostlysunny': 'mostlysunny',
+  'partlycloudy': 'partlycloudy',
+  'partlysunny': 'partlysunny',
+  'rain': 'rain',
+  'sleet': 'sleet',
+  'snow': 'snow',
+  'sunny': 'sunny',
+  'tstorms': 'tstorms'
 }
 
-function updateWeatherIcon(iconId, condition) {
+function updateWeatherApixuIcon(iconId, condition) {
+  updateWeatherIcon(iconId, condition.code, "http:" + condition.url);
+}
+
+function updateWeatherIcon(iconId, code, url) {
   var iconElement = document.getElementById(iconId);
   if (iconElement) {
     var iconUrl;
-    if (weatherIcons[condition.code]) {
-      iconUrl = 'weather-icons/icons/black/svg/' + weatherIcons[condition.code] + '.svg';
-    } else if (condition.icon) {
-      iconUrl = 'http:' + condition.icon;
+    if (weatherIcons[code]) {
+      iconUrl = 'weather-icons/icons/black/svg/' + weatherIcons[code] + '.svg';
+    } else if (url) {
+      iconUrl = url;
     } else {
       iconUrl = 'weather-icons/icons/black/svg/unknown.svg';
     }
@@ -90,33 +149,97 @@ function updateWeatherIcon(iconId, condition) {
   }
 }
 
-function handleWeatherRespone(response) {
+function logAjaxError(jqXHR, textStatus, errorThrown) {
+  console.log("textStatus:" + textStatus +
+    " errorThrown: " + errorThrown +
+    " jqXHR.status: " + jqXHR.status +
+    " jqXHR.responseText: " + jqXHR.responseText);
+}
+
+function handleWeatherUndergroundConditionsResponse(response) {
+  weatherCache.current = response.current_observation
+  saveForecastCache();
+  updateUiFromCache();
+}
+
+function getDate(forecastHour) {
+  var date = new Date(0);
+  date.setUTCSeconds(forecastHour.FCTTIME.epoch);
+  return date;
+}
+
+function isToday(forecastHour) {
+  return getDate(forecastHour).getDate() == (new Date()).getDate();
+}
+
+function handleWeatherUndergroundHourlyResponse(response) {
+  for (var i = 0; i < response.hourly_forecast.length; i++) {
+    var hour = response.hourly_forecast[i];
+    if (isToday(hour)) {
+      weatherCache.forecast[getDate(hour).getHours()] = hour;
+    }
+  }
+  for (const [hour, forecastHour] of Object.entries(weatherCache.forecast)) {
+    if (!isToday(forecastHour)) {
+      delete weatherCache.forecast[hour]
+    }
+  }
+  saveForecastCache();
+  updateUiFromCache();
+}
+
+function updateUiFromCache() {
+  document.getElementById('weather-current-temp').innerText = formatTemp(weatherCache.current.temp_f);
+  updateWeatherIcon('weather-current-icon', weatherCache.current.icon, weatherCache.current.icon_url);
+  updateRecess(weatherCache.forecast, 10, '1');
+  updateRecess(weatherCache.forecast, 12, '2');
+  updateRecess(weatherCache.forecast, 14, '3');
+}
+
+function updateRecess(forecastHours, hour, recessNumber) {
+  forecastHour = forecastHours[hour]
+  if (forecastHour) {
+    temp = formatTemp(forecastHour.temp.english)
+    icon = forecastHour.icon
+    iconUrl = forecastHour.icon_url
+  } else {
+    temp = '?'
+    icon = -1
+    iconUrl = ''
+  }
+  document.getElementById('weather-recess-' + recessNumber + '-temp').innerText = temp;
+  updateWeatherIcon('weather-recess-' + recessNumber + '-icon', icon, iconUrl);
+}
+
+function handleApixuWeatherResponse(response) {
   document.getElementById('weather-current-temp').innerText = formatTemp(response.current.temp_f);
-  updateWeatherIcon('weather-current-icon', response.current.condition);
+  updateWeatherApixuIcon('weather-current-icon', response.current.condition);
   var foundRecess1 = false;
   var foundRecess2 = false;
   for (var i = 0; i < response.forecast.forecastday.length; i++) {
     var day = response.forecast.forecastday[i];
-    for (var j = 0; j < day.hour.length; j++) {
-      var hour = day.hour[j];
-      var time = new Date(hour.time);
-      if (time.getHours() == 10) {
-        document.getElementById('weather-recess-1-temp').innerText = formatTemp(hour.temp_f);
-        updateWeatherIcon('weather-recess-1-icon', hour.condition);
-        foundRecess1 = true;
-      } else if (time.getHours() == 14) {
-        document.getElementById('weather-recess-2-temp').innerText = formatTemp(hour.temp_f);
-        updateWeatherIcon('weather-recess-2-icon', hour.condition);
-        foundRecess2 = true;
-    }
+    if (day.hour) {
+      for (var j = 0; j < day.hour.length; j++) {
+        var hour = day.hour[j];
+        var time = new Date(hour.time);
+        if (time.getHours() == 10) {
+          document.getElementById('weather-recess-1-temp').innerText = formatTemp(hour.temp_f);
+          updateWeatherApixuIcon('weather-recess-1-icon', hour.condition);
+          foundRecess1 = true;
+        } else if (time.getHours() == 14) {
+          document.getElementById('weather-recess-2-temp').innerText = formatTemp(hour.temp_f);
+          updateWeatherApixuIcon('weather-recess-2-icon', hour.condition);
+          foundRecess2 = true;
+        }
+      }
     }
   }
   if (!foundRecess1) {
     document.getElementById('weather-recess-1-temp').innerText = "?";
-    updateWeatherIcon('weather-recess-1-icon', -1);
+    updateWeatherIcon('weather-recess-1-icon', -1, '');
   }
   if (!foundRecess2) {
     document.getElementById('weather-recess-2-temp').innerText = "?";
-    updateWeatherIcon('weather-recess-2-icon', -1);
+    updateWeatherIcon('weather-recess-2-icon', -1, '');
   }
 }
