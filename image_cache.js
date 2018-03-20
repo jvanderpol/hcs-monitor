@@ -15,6 +15,7 @@ function initAndSyncImageCache(callback) {
   });
 }
 
+
 function initImageCache(callback) {
   chrome.storage.local.get({imageCache: {}}, function(items) {
     if (items.imageCache.version == latestImageCacheVersion) {
@@ -150,6 +151,8 @@ function initFilesystem(successHandler) {
 function syncPictures() {
   console.log("syncing pictures");
   facebookGraphCall({path:'/140475252639971/photos/uploaded', fields:'images,created_time,name'}, handleImageResponse);
+  // Sync every 30 minutes
+  setTimeout(syncPictures, 1000 * 60 * 30);
 }
 
 function handleImageResponse(response) {

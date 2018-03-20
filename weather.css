@@ -31,12 +31,13 @@
   height: 50%;
   width: 50%;
   transform:scale(1.2);
+  margin: 10% 0;
   margin-left: 4%;
 }
 
 .weather-current p {
   font-size: 70px;
-  margin: 10% 0;
+  margin: auto;
   margin-right: 4%;
 }
 
@@ -49,19 +50,21 @@
 
 .weather-recess-number {
   font-size: 30px;
-  margin: 12% 0;
+  margin: auto;
   margin-left: 4%;
+  margin-right: 0;
 }
 
 .weather-recess img {
   height: 30%;
   width: 30%;
-  margin: auto;
+  margin: 2% 0;
   transform:scale(1.2);
 }
 
 .weather-recess-temp {
   font-size: 45px;
-  margin: 10% 0;
+  margin: auto;
+  margin-left: 0%;
   margin-right: 4%;
 }

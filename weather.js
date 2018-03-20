@@ -4,6 +4,7 @@ var weatherCache = {};
 window.addEventListener("load", function() {
   initForecastCache(function() {
     initApiKeys(refreshWeather);
+    updateUiFromCache();
   });
 });
 
@@ -23,6 +24,7 @@ function saveForecastCache() {
 }
 
 function refreshWeather() {
+  console.log("Refrehsing weather");
   var weatherUndergroundKey = getKey("weather-underground");
   if (weatherUndergroundKey) {
     $.ajax({
@@ -35,20 +37,6 @@ function refreshWeather() {
     })
       .done(handleWeatherUndergroundHourlyResponse)
       .fail(logAjaxError);
-  } else {
-    var apixuKey = getKey("apixu");
-    if (apixuKey) {
-      var xhr = new XMLHttpRequest();
-      var url = "http://api.apixu.com/v1/forecast.json?key=" + apixuKey + "&q=46322&days=1";
-      xhr.open("GET",  url, true);
-      xhr.onreadystatechange = function() {
-        if (xhr.readyState == 4) {
-          var response = JSON.parse(xhr.responseText);
-          handleApixuWeatherResponse(response);
-        }
-      }
-      xhr.send();
-    }
   }
   // Refresh every 5 minutes
   setTimeout(refreshWeather, 5 * 60000);
@@ -59,56 +47,6 @@ function formatTemp(temp) {
 }
 
 var weatherIcons = {
-  1000: 'sunny', // sunny
-  1003: 'partlycloudy', // partly cloudy
-  1006: 'cloudy', // cloudy
-  1009: 'cloudy', // overcast
-  1030: 'fog', // mist
-  1063: 'chancerain', // patchy rain possible
-  1066: 'chanceflurries', // patchy snow possible
-  1069: 'chancesleet', // patchy sleet possible
-  1072: 'chancesleet', // patchy freezing drizzle
-  1087: 'tstorms', // Thundery outbreaks possible
-  1114: 'snow', // blowing snow
-  1117: 'snow', // blizzard
-  1135: 'fog', // fog
-  1147: 'fog', // freezing frog
-  1150: 'chancerain', // patchy light drizzle
-  1153: 'chancerain', // light drizzle
-  1168: 'sleet', // freezing drizzle
-  1171: 'sleet', // Heavy freezing drizzle
-  1180: 'chancerain', // Patchy light rain
-  1183: 'chancerain', // Light rain
-  1186: 'chancerain', // Moderate rain at times
-  1189: 'chancerain', // Moderate rain
-  1192: 'rain	', // Heavy rain at times
-  1195: 'rain	', // Heavy rain
-  1198: 'chancesleet', // Light freezing rain
-  1201: 'sleet', // Moderate or heavy freezing rain
-  1204: 'chancesleet', // Light sleet
-  1207: 'sleet', // Moderate or heavy sleet
-  1210: 'chanceflurries', // Patchy light snow
-  1213: 'chanceflurries', // Light snow
-  1216: 'chancesnow', // Patchy moderate snow
-  1219: 'chancesnow', // Moderate snow
-  1222: 'snow', // Patchy heavy snow
-  1225: 'snow', // Heavy snow
-  1237: 'sleet', // Ice pellets
-  1240: 'chancerain', // Light rain shower
-  1243: 'sleet', // Moderate or heavy rain shower
-  1246: 'sleet', // Torrential rain shower
-  1249: 'chancesleet', // Light sleet showers
-  1252: 'sleet', // Moderate or heavy sleet showers
-  1255: 'chancesnow', // Light snow showers
-  1258: 'snow', // Moderate or heavy snow showers
-  1261: 'sleet', // Light showers of ice pellets
-  1264: 'sleet', // Moderate or heavy showers of ice pellets
-  1273: 'chancetstorms', // Patchy light rain with thunder
-  1276: 'tstorms', // Moderate or heavy rain with thunder
-  1279: 'chancetstorms', // Patchy light snow with thunder
-  1282: 'tstorms', // Moderate or heavy snow with thunder
-
-  // Weather underground
   'chanceflurries': 'chanceflurries',
   'chancerain': 'chancerain',
   'chancesleet': 'chancesleet',
@@ -128,10 +66,6 @@ var weatherIcons = {
   'snow': 'snow',
   'sunny': 'sunny',
   'tstorms': 'tstorms'
-}
-
-function updateWeatherApixuIcon(iconId, condition) {
-  updateWeatherIcon(iconId, condition.code, "http:" + condition.url);
 }
 
 function updateWeatherIcon(iconId, code, url) {
@@ -158,6 +92,7 @@ function logAjaxError(jqXHR, textStatus, errorThrown) {
 
 function handleWeatherUndergroundConditionsResponse(response) {
   weatherCache.current = response.current_observation
+  console.log("Current weather sync complete");
   saveForecastCache();
   updateUiFromCache();
 }
@@ -184,13 +119,19 @@ function handleWeatherUndergroundHourlyResponse(response) {
       delete weatherCache.forecast[hour]
     }
   }
+  console.log("Forecast sync complete");
   saveForecastCache();
   updateUiFromCache();
 }
 
 function updateUiFromCache() {
-  document.getElementById('weather-current-temp').innerText = formatTemp(weatherCache.current.temp_f);
-  updateWeatherIcon('weather-current-icon', weatherCache.current.icon, weatherCache.current.icon_url);
+  if ((new Date()).getTime() / 1000 - parseInt(weatherCache.current.observation_epoch) < 60 * 60) {
+    document.getElementById('weather-current-temp').innerText = formatTemp(weatherCache.current.temp_f);
+    updateWeatherIcon('weather-current-icon', weatherCache.current.icon, weatherCache.current.icon_url);
+  } else {
+    document.getElementById('weather-current-temp').innerText = "?";
+    updateWeatherIcon('weather-current-icon', -1, '');
+  }
   updateRecess(weatherCache.forecast, 10, '1');
   updateRecess(weatherCache.forecast, 12, '2');
   updateRecess(weatherCache.forecast, 14, '3');
@@ -209,37 +150,4 @@ function updateRecess(forecastHours, hour, recessNumber) {
   }
   document.getElementById('weather-recess-' + recessNumber + '-temp').innerText = temp;
   updateWeatherIcon('weather-recess-' + recessNumber + '-icon', icon, iconUrl);
-}
-
-function handleApixuWeatherResponse(response) {
-  document.getElementById('weather-current-temp').innerText = formatTemp(response.current.temp_f);
-  updateWeatherApixuIcon('weather-current-icon', response.current.condition);
-  var foundRecess1 = false;
-  var foundRecess2 = false;
-  for (var i = 0; i < response.forecast.forecastday.length; i++) {
-    var day = response.forecast.forecastday[i];
-    if (day.hour) {
-      for (var j = 0; j < day.hour.length; j++) {
-        var hour = day.hour[j];
-        var time = new Date(hour.time);
-        if (time.getHours() == 10) {
-          document.getElementById('weather-recess-1-temp').innerText = formatTemp(hour.temp_f);
-          updateWeatherApixuIcon('weather-recess-1-icon', hour.condition);
-          foundRecess1 = true;
-        } else if (time.getHours() == 14) {
-          document.getElementById('weather-recess-2-temp').innerText = formatTemp(hour.temp_f);
-          updateWeatherApixuIcon('weather-recess-2-icon', hour.condition);
-          foundRecess2 = true;
-        }
-      }
-    }
-  }
-  if (!foundRecess1) {
-    document.getElementById('weather-recess-1-temp').innerText = "?";
-    updateWeatherIcon('weather-recess-1-icon', -1, '');
-  }
-  if (!foundRecess2) {
-    document.getElementById('weather-recess-2-temp').innerText = "?";
-    updateWeatherIcon('weather-recess-2-icon', -1, '');
-  }
 }
