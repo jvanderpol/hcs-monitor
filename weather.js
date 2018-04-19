@@ -24,22 +24,22 @@ function saveForecastCache() {
 }
 
 function refreshWeather() {
-  console.log("Refrehsing weather");
+  console.log('Refreshing weather');
   var weatherUndergroundKey = getKey("weather-underground");
   if (weatherUndergroundKey) {
     $.ajax({
       url: "http://api.wunderground.com/api/" + weatherUndergroundKey + "/conditions/q/IN/46322.json"
     })
       .done(handleWeatherUndergroundConditionsResponse)
-      .fail(logAjaxError);
+      .fail(logAjaxError('weather underground conditions'));
     $.ajax({
       url: "http://api.wunderground.com/api/" + weatherUndergroundKey + "/hourly/q/IN/46322.json"
     })
       .done(handleWeatherUndergroundHourlyResponse)
-      .fail(logAjaxError);
+      .fail(logAjaxError('weather underground hourly'));
   }
-  // Refresh every 5 minutes
-  setTimeout(refreshWeather, 5 * 60000);
+  // Refresh every 10 minutes
+  setTimeout(refreshWeather, 10 * 60000);
 }
 
 function formatTemp(temp) {
@@ -83,16 +83,8 @@ function updateWeatherIcon(iconId, code, url) {
   }
 }
 
-function logAjaxError(jqXHR, textStatus, errorThrown) {
-  console.log("textStatus:" + textStatus +
-    " errorThrown: " + errorThrown +
-    " jqXHR.status: " + jqXHR.status +
-    " jqXHR.responseText: " + jqXHR.responseText);
-}
-
 function handleWeatherUndergroundConditionsResponse(response) {
   weatherCache.current = response.current_observation
-  console.log("Current weather sync complete");
   saveForecastCache();
   updateUiFromCache();
 }
@@ -119,7 +111,6 @@ function handleWeatherUndergroundHourlyResponse(response) {
       delete weatherCache.forecast[hour]
     }
   }
-  console.log("Forecast sync complete");
   saveForecastCache();
   updateUiFromCache();
 }

@@ -20,19 +20,34 @@ function chooseBucket(buckets) {
   return null;
 }
 
+var recentlyShownIds = [];
+
 function getNextImage() {
-  var bucketIndex = Math.random();
-  var firstBucket = chooseBucket(buckettedImageCache);
-  if (firstBucket) {
-    var secondBucket = chooseBucket(firstBucket.values);
-    if (secondBucket) {
-      var imageIndex = Math.random();
-      var imageIndex = Math.floor(Math.random() * secondBucket.values.length);
-      var imageId = secondBucket.values[imageIndex];
-      return imageCache.images[imageId];
+  var nextImageId;
+  // Just try 50 times to find an image we have not shown recently...
+  // not my proudest moment but it should work
+  for (var i = 0; i < 50; i++) {
+    var bucketIndex = Math.random();
+    var firstBucket = chooseBucket(buckettedImageCache);
+    if (firstBucket) {
+      var secondBucket = chooseBucket(firstBucket.values);
+      if (secondBucket) {
+        var imageIndex = Math.floor(Math.random() * secondBucket.values.length);
+        nextImageId  = secondBucket.values[imageIndex];
+        if (!recentlyShownIds.includes(nextImageId)) {
+          break;
+        }
+      }
     }
   }
-  return null;
+  if (!nextImageId) {
+    return null;
+  }
+  recentlyShownIds.unshift(nextImageId);
+  while (recentlyShownIds.length > 50) {
+    recentlyShownIds.pop();
+  }
+  return imageCache.images[nextImageId];
 }
 
 var nextZIndex = 0;
