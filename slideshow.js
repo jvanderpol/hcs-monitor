@@ -24,9 +24,10 @@ var recentlyShownIds = [];
 
 function getNextImage() {
   var nextImageId;
+  var maxRandomAttempts = 50;
   // Just try 50 times to find an image we have not shown recently...
   // not my proudest moment but it should work
-  for (var i = 0; i < 50; i++) {
+  for (var i = 0; i < maxRandomAttempts; i++) {
     var bucketIndex = Math.random();
     var firstBucket = chooseBucket(buckettedImageCache);
     if (firstBucket) {
@@ -39,6 +40,9 @@ function getNextImage() {
         }
       }
     }
+    if (i == maxRandomAttempts - 1) {
+      console.error("Gave up and showing a recent image");
+    }
   }
   if (!nextImageId) {
     return null;
@@ -50,8 +54,6 @@ function getNextImage() {
   return imageCache.images[nextImageId];
 }
 
-var nextZIndex = 0;
-
 function createImageSlide(image, width, height) {
   var slideContainer = document.createElement("div");
   slideContainer.classList.add("fade", "slide-container");
@@ -61,12 +63,10 @@ function createImageSlide(image, width, height) {
   var background = document.createElement("img");
   background.classList.add("slide-background");
   background.src = image.url;
-  background.zIndex = nextZIndex++;
 
   var imageElement = document.createElement("img");
   imageElement.classList.add("slide-image");
   imageElement.src = image.url;
-  imageElement.zIndex = nextZIndex++;
 
   var imageMultiplier;
   var backgroundMultiplier;
@@ -110,6 +110,9 @@ function showAddedSlide() {
       slideshowContainer.removeChild(slide);
     } else {
       slide.style.opacity = 0;
+      $(slide).on("transitionend", function  (event) {
+        slideshowContainer.removeChild(event.target);
+      });
     }
   }
 }
@@ -126,5 +129,5 @@ function addNextSlide() {
     nextSlide = createImageSlide(image, slideshowContainer.offsetWidth, slideshowContainer.offsetHeight)
     slideshowContainer.appendChild(nextSlide);
   }
-  setTimeout(addNextSlide, 4000);
+  setTimeout(addNextSlide, 5000);
 }
