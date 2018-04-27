@@ -1,7 +1,6 @@
-window.addEventListener("load", function() {
+$(window).on("load", function() {
   initAndSyncImageCache(function() {
     addNextSlide();
-    showAddedSlide();
   });
 });
 
@@ -54,19 +53,28 @@ function getNextImage() {
   return imageCache.images[nextImageId];
 }
 
-function createImageSlide(image, width, height) {
+function createImageSlide(image, width, height, doneCallback) {
   var slideContainer = document.createElement("div");
   slideContainer.classList.add("fade", "slide-container");
   slideContainer.style.width = width + "px";
   slideContainer.style.height = height + "px";
 
+  var loadCount = 0;
+  var maybeFinish = function() {
+    if (++loadCount == 2) {
+      doneCallback(slideContainer);
+    }
+  };
+
   var background = document.createElement("img");
   background.classList.add("slide-background");
   background.src = image.url;
+  $(background).on("load", maybeFinish);
 
   var imageElement = document.createElement("img");
   imageElement.classList.add("slide-image");
   imageElement.src = image.url;
+  $(imageElement).on("load", maybeFinish);
 
   var imageMultiplier;
   var backgroundMultiplier;
@@ -99,7 +107,7 @@ function createImageSlide(image, width, height) {
   return slideContainer
 }
 
-function showAddedSlide() {
+function showSlide(nextSlide) {
   var slideshowContainer = document.getElementById('slideshow-container');
   var slideContainers = document.getElementsByClassName("slide-container");
   for (var i = 0; i < slideContainers.length; i++) {
@@ -117,16 +125,13 @@ function showAddedSlide() {
   }
 }
 
-var nextSlide;
-
 function addNextSlide() {
-  // This is done here to ensure the slide is actually loaded, this should probably be done with a callback
-  showAddedSlide();
-
   var image = getNextImage();
+  var slideshowContainer = document.getElementById('slideshow-container');
   if (image != null) {
-    var slideshowContainer = document.getElementById('slideshow-container');
-    nextSlide = createImageSlide(image, slideshowContainer.offsetWidth, slideshowContainer.offsetHeight)
+    var nextSlide = createImageSlide(image, slideshowContainer.offsetWidth, slideshowContainer.offsetHeight, function(completedSlide) {
+      showSlide(completedSlide);
+    });
     slideshowContainer.appendChild(nextSlide);
   }
   setTimeout(addNextSlide, 5000);
