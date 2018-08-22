@@ -134,5 +134,5 @@ function addNextSlide() {
     });
     slideshowContainer.appendChild(nextSlide);
   }
-  setTimeout(addNextSlide, 5000);
+  setTimeout(addNextSlide, 8000);
 }
