@@ -19,17 +19,20 @@
       </tr>
     </script>
     <script id="imageRowTemplate" type="x-tmpl-mustache">
-      <tr>
+      <tr {{#disabled}}style="background-color: red;"{{/disabled}}>
         <td>
           <img src="{{imageUrl}}" alt="localImage" height=200, width=200 />
         </td>
         <td>
-          <pre>{{debugInfo}}</pre>
+          <div style="overflow:scroll; height:200px">
+            <pre>imageId = {{imageId}}</pre>
+            <pre>{{debugInfo}}</pre>
+          </div>
         </td>
       </tr>
     </script>
   </head>
   <body>
-    <table id="imageTable" />
+    <table id="imageTable"/>
   </body>
 </html>

@@ -1,7 +1,7 @@
 var filesystem = null;
 var imageCache = {};
 var buckettedImageCache = [];
-var latestImageCacheVersion = "0.2";
+var currentImageCacheVersion = "0.3";
 var accessToken = null;
 
 function initAndSyncImageCache(callback) {
@@ -18,10 +18,21 @@ function initAndSyncImageCache(callback) {
 
 function initImageCache(callback) {
   chrome.storage.local.get({imageCache: {}}, function(items) {
-    if (items.imageCache.version == latestImageCacheVersion) {
+    if (items.imageCache && items.imageCache.version == "0.2") {
+      // Upgrade from 0.2 to 0.3
+      items.imageCache.version = "0.3"
+      items.imageCache.disabledImageIds = {
+        1944261675594644: true,
+        1897526086934870: true,
+        1928648037156008: true,
+        1950014561686022: true,
+        1968645393156272: true,
+        1943989572288521: true}
+    }
+    if (items.imageCache && items.imageCache.version == currentImageCacheVersion) {
       imageCache = items.imageCache
     } else {
-      imageCache = {version: latestImageCacheVersion, images: {}}
+      imageCache = {version: currentImageCacheVersion, images: {}, disabledImageIds: {}}
     }
     bucketImageCache();
     callback();
@@ -39,7 +50,10 @@ function doneSyncing() {
 }
 
 function bucketImageCache() {
-  datedBuckets = bucketImagesByDate(Object.keys(imageCache.images));
+  enabledImageIds = Object.keys(imageCache.images).filter(
+    function(imageId) { return !imageCache.disabledImageIds[imageId] }
+  );
+  datedBuckets = bucketImagesByDate(enabledImageIds);
   datedBuckets.forEach(function (bucket) { bucket.values = bucketImageByFaces(bucket.values) });
   buckettedImageCache = datedBuckets;
 }

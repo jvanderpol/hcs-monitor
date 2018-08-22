@@ -11,6 +11,15 @@ function drawImageTable() {
   Mustache.parse(imageRowTemplate);
   var bucketRowTemplate = $("#bucketRowTemplate").html();
   Mustache.parse(bucketRowTemplate);
+  function renderImageId(imageId) {
+    var image = imageCache.images[imageId];
+    return Mustache.render(imageRowTemplate, {
+      debugInfo: JSON.stringify(image, null, 2),
+      disabled: imageCache.disabledImageIds[imageId],
+      imageId: imageId,
+      imageUrl: image.url
+    });
+  }
   buckettedImageCache.forEach(function(timeBucket) {
     timeBucket.values.forEach(function(faceBucket) {
       var weight = timeBucket.weight * faceBucket.weight;
@@ -22,13 +31,20 @@ function drawImageTable() {
       });
       $('#imageTable').append(renderedBucket);
       var renderedImageFromBuckets = 0;
+      var trimmedCount = 0;
       faceBucket.values.forEach(function(imageId) {
-        var image = imageCache.images[imageId];
-        var rendered = Mustache.render(imageRowTemplate, {debugInfo: JSON.stringify(image, null, 2), imageUrl: image.url});
-        if (renderedImageFromBuckets++ < 10) {
-          $('#imageTable').append(rendered);
+        if (renderedImageFromBuckets++ < 100) {
+          $('#imageTable').append(renderImageId(imageId));
+        } else {
+          trimmedCount++;
         }
       });
+      if (trimmedCount > 0) {
+        $('#imageTable').append("<tr><td>Trimmed " + trimmedCount + "</td></tr>")
+      }
     });
+  });
+  Object.keys(imageCache.disabledImageIds).forEach(function(imageId) {
+      $('#imageTable').append(renderImageId(imageId));
   });
 }
