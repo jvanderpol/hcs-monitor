@@ -404,28 +404,44 @@ function facebookLogin(callback) {
     });
 };
 
+var callCount = 0;
+
 function facebookGraphCall(options, callback) {
-  var xhr = new XMLHttpRequest();
-  var url;
-  if (options.url) {
-    url = options.url
-  } else {
-    url = "https://graph.facebook.com" + options.path + "?fields=" + (options.fields || "") + "&access_token=" + accessToken;
+  if (callCount > 90) {
+    setTimeout(function() {
+      facebookGraphCall(options, callback);
+    }, 600000 /* 10 minutes */);
+    return;
   }
-  xhr.open("GET",  url, true);
-  xhr.onreadystatechange = function() {
-    if (xhr.readyState == 4) {
-      if (xhr.status == 400) {
+  var uriBase = "https://graph.facebook.com" + options.path
+  var params = {
+    fields: (options.fields || ""),
+    access_token: accessToken
+  };
+  $.get({
+      url:uriBase,
+      data:params,
+    }).done(function(data, textStatus, request) {
+      //TODO Determine why this header doesn't show up
+      var usage = request.getResponseHeader("x-app-usage");
+      if (usage) {
+        var parsedUsage = JSON.parse(usage);
+        callCount = parsedUsage.call_count;
+      }
+      callback(data);
+    }).fail(function(jqXHR, textStatus, errorThrown) {
+      if (jqXHR.status == 400) {
         facebookLogin(function() {
           facebookGraphCall(options, callback);
         });
       } else {
-        var response = JSON.parse(xhr.responseText);
-        callback(response);
+        var errorString = "textStatus:" + textStatus +
+          " errorThrown: " + errorThrown +
+          " jqXHR.status: " + jqXHR.status +
+          " jqXHR.responseText: " + jqXHR.responseText;
+        errorCallback(errorString);
       }
-    }
-  }
-  xhr.send();
+    });
 }
 
 function globalErrorHandler(error) {
