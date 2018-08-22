@@ -319,7 +319,7 @@ function updateFaceScore(image, callback) {
       callback();
     },
     function(error) {
-      console.log(image.remoteUrl + ": " + error);
+      console.error(image.remoteUrl + ": " + error);
       if (!image.facialScoreDataError) {
         image.facialScoreDataError = [];
       }
@@ -413,15 +413,13 @@ function facebookGraphCall(options, callback) {
     }, 600000 /* 10 minutes */);
     return;
   }
-  var uriBase = "https://graph.facebook.com" + options.path
-  var params = {
-    fields: (options.fields || ""),
-    access_token: accessToken
-  };
-  $.get({
-      url:uriBase,
-      data:params,
-    }).done(function(data, textStatus, request) {
+  var url;
+  if (options.url) {
+    url = options.url;
+  } else {
+    url = "https://graph.facebook.com" + options.path + "?" + $.param({fields: options.fields, access_token: accessToken});
+  }
+  $.get(url).done(function(data, textStatus, request) {
       //TODO Determine why this header doesn't show up
       var usage = request.getResponseHeader("x-app-usage");
       if (usage) {
@@ -430,8 +428,9 @@ function facebookGraphCall(options, callback) {
       }
       callback(data);
     }).fail(function(jqXHR, textStatus, errorThrown) {
-      if (jqXHR.status == 400) {
+      if (jqXHR.status == 400 && !options.isRetry) {
         facebookLogin(function() {
+          options.isRetry = true;
           facebookGraphCall(options, callback);
         });
       } else {
@@ -439,14 +438,14 @@ function facebookGraphCall(options, callback) {
           " errorThrown: " + errorThrown +
           " jqXHR.status: " + jqXHR.status +
           " jqXHR.responseText: " + jqXHR.responseText;
-        errorCallback(errorString);
+        console.error(errorString);
       }
     });
 }
 
 function globalErrorHandler(error) {
   if (!error || !error.code) {
-    console.log('unknown error ' + error);
+    console.error('unknown error ' + error);
     return;
   }
   var message = '';
@@ -471,5 +470,5 @@ function globalErrorHandler(error) {
       message = 'Unknown Error';
       break;
   }
-  console.log(message);
+  console.error(message);
 }
