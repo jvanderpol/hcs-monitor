@@ -110,12 +110,15 @@ function createImageSlide(image, width, height, doneCallback) {
 function showSlide(nextSlide) {
   var slideshowContainer = document.getElementById('slideshow-container');
   var slideContainers = document.getElementsByClassName("slide-container");
+  var toRemove = [];
   for (var i = 0; i < slideContainers.length; i++) {
     var slide = slideContainers[i];
     if (slide == nextSlide) {
       slide.style.opacity = 1;
     } else if (slide.style.opacity == 0) {
-      slideshowContainer.removeChild(slide);
+      // Don't remove these while iterating over slideContainers as that will
+      // break iteration of the slideContainer elements.
+      toRemove.push(slide);
     } else {
       slide.style.opacity = 0;
       $(slide).on("transitionend", function  (event) {
@@ -123,6 +126,9 @@ function showSlide(nextSlide) {
       });
     }
   }
+  toRemove.forEach(function (slide) {
+    slideshowContainer.removeChild(slide)
+  });
 }
 
 function addNextSlide() {
