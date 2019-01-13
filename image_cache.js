@@ -8,7 +8,10 @@ function initAndSyncImageCache(callback) {
   initImageCache(function() {
     initFilesystem(function() {
       initFacebook(function() {
-        syncPictures();
+        // Every 30 minutes
+        scheduleSync("new images", syncNewPictures, 1000 * 60 * 30, imageCache.lastSyncInMillis)
+        // Every 2 hours
+        scheduleSync("trim images", trimRemovedPictures, 1000 * 60 * 60 * 2, imageCache.lastTrimSyncInMillis)
       });
       callback();
     });
@@ -46,6 +49,7 @@ function saveImageCache() {
 
 function doneSyncing() {
   updateFaceScores();
+  imageCache.lastSyncInMillis = new Date().getTime();
   saveImageCache();
 }
 
@@ -162,15 +166,54 @@ function initFilesystem(successHandler) {
     }, globalErrorHandler);
 }
 
-function syncPictures() {
-  console.log("syncing pictures");
-  facebookGraphCall({path:'/140475252639971/photos/uploaded', fields:'images,created_time,name'}, handleImageResponse);
-  // Sync every 30 minutes
-  setTimeout(syncPictures, 1000 * 60 * 30);
+function syncHistoryLimit() {
+  return daysAgo(365 * 2);
 }
 
-function handleImageResponse(response) {
-  var twoYearsAgo = daysAgo(365 * 2);
+function retainImageIds(retainedImageIds) {
+  var toDelete = Object.keys(imageCache.images).filter(
+    function(imageId) { return !(imageId in retainedImageIds) }
+  );
+  console.log("trimming: " + toDelete);
+  toDelete.forEach(function(id) { delete imageCache.images[id] });
+  imageCache.lastTrimSyncInMillis = new Date().getTime();
+  saveImageCache();
+}
+
+function trimRemovedPictures() {
+  console.log("trimming removed pictures");
+  facebookGraphCall({path:'/140475252639971/photos/uploaded', fields:'images,created_time,name'}, handleImageResponseForTrim);
+  retainedImageIds = {}
+  function handleImageResponseForTrim(response) {
+    var nextPageToRequest = response.paging && response.paging.next
+    var requestNextPage = true;
+    for (var i = 0; i < response.data.length; i++) {
+      var image = response.data[i];
+      if (new Date(image.created_time) < syncHistoryLimit()) {
+        retainImageIds(retainedImageIds);
+        requestNextPage = false;
+        break;
+      } else {
+        retainedImageIds[image.id] = true;
+      }
+    }
+    if (nextPageToRequest && requestNextPage) {
+      var lastDate = "empty";
+      if (response.data.length > 0) {
+        lastDate = response.data[response.data.length - 1].created_time;
+      }
+      console.log("Fetching nextPage for trim, last image date: " + lastDate);
+      facebookGraphCall({url:nextPageToRequest}, handleImageResponseForTrim);
+    }
+  }
+}
+
+function syncNewPictures() {
+  console.log("syncing new pictures");
+  facebookGraphCall({path:'/140475252639971/photos/uploaded', fields:'images,created_time,name'}, handleImageResponseForNewPictures);
+}
+
+function handleImageResponseForNewPictures(response) {
   var nextPageToRequest = response.paging && response.paging.next
   var downloadsDone = function() {
     if (!nextPageToRequest) {
@@ -188,7 +231,7 @@ function handleImageResponse(response) {
   };
   for (var i = 0; i < response.data.length; i++) {
     var image = response.data[i];
-    if (new Date(image.created_time) < twoYearsAgo) {
+    if (new Date(image.created_time) < syncHistoryLimit()) {
       nextPageToRequest = null;
       continue;
     }
@@ -209,7 +252,7 @@ function handleImageResponse(response) {
       lastDate = response.data[response.data.length - 1].created_time;
     }
     console.log("Fetching nextPage, last image date: " + lastDate);
-    facebookGraphCall({url:nextPageToRequest}, handleImageResponse);
+    facebookGraphCall({url:nextPageToRequest}, handleImageResponseForNewPictures);
   }
 }
 
@@ -295,7 +338,7 @@ function updateFaceScoreWithWaiting(keys, callback) {
   var imageIndex;
   for (imageIndex = 0; imageIndex < keys.length; imageIndex++) {
     var image = imageCache.images[keys[imageIndex]];
-    if (!image.facialScoreData && (!image.facialScoreDataError || image.facialScoreDataError.length < 5)) {
+    if (image && !image.facialScoreData && (!image.facialScoreDataError || image.facialScoreDataError.length < 5)) {
       updateFaceScore(image, checkCompletedCallback);
       pendingCalls++;
       if (pendingCalls == API_CALLS_PER_MINUTE) {
@@ -384,11 +427,17 @@ function facebookLogin(callback) {
   var redirect_url = 'https://www.facebook.com/connect/login_success.html';
   updateListener = function(tabId, changeInfo, tab) {
     if (changeInfo.url) {
-      var params = changeInfo.url.split('#')[1];
-      var accessToken = params.split('&')[0].split('=')[1];
-      console.log("Got new accessToken: " + accessToken);
-      setAccessToken(accessToken);
-      chrome.storage.local.set({accessToken: accessToken})
+      // Example changeInfo.url:
+      // https://www.facebook.com/connect/login_success.html#access_token=asdf1234&expires_in=6060&reauthorize_required_in=7776000&data_access_expiration_time=1553397540
+      var match = changeInfo.url.match(/login_success.html#.*access_token=([^&]+)/);
+      if (match) {
+        var accessToken = match[1];
+        console.log("Got new accessToken: " + accessToken);
+        setAccessToken(accessToken);
+        chrome.storage.local.set({accessToken: accessToken})
+      } else {
+        console.error("Unable to find accessToken from url " + changeInfo.url);
+      }
       chrome.tabs.onUpdated.removeListener(updateListener);
       if (tab.id) {
         chrome.tabs.remove(tab.id);
