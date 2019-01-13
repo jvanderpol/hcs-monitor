@@ -1,6 +1,9 @@
 var latestForecastCacheVersion = "0.1";
 var weatherCache = {};
 
+const WEATHER_REFRESH_RATE = 10 * 60000;
+const MAX_WEATHER_AGE_TO_DISPLAY_IN_SECONDS = 60 * 60 * 2;
+
 window.addEventListener("load", function() {
   initForecastCache(function() {
     initApiKeys(function() {
@@ -117,7 +120,9 @@ function handleWeatherUndergroundHourlyResponse(response) {
 }
 
 function updateUiFromCache() {
-  if ((new Date()).getTime() / 1000 - parseInt(weatherCache.current.observation_epoch) < 60 * 60) {
+  var timeInSeconds = new Date().getTime() / 1000;
+  var weatherTimeInSeconds = parseInt(weatherCache.current.observation_epoch);
+  if (timeInSeconds - weatherTimeInSeconds < MAX_WEATHER_AGE_TO_DISPLAY_IN_SECONDS) {
     document.getElementById('weather-current-temp').innerText = formatTemp(weatherCache.current.temp_f);
     updateWeatherIcon('weather-current-icon', weatherCache.current.icon, weatherCache.current.icon_url);
   } else {
