@@ -3,7 +3,9 @@ var weatherCache = {};
 
 window.addEventListener("load", function() {
   initForecastCache(function() {
-    initApiKeys(startWeatherRefreshing);
+    initApiKeys(function() {
+      scheduleSync("weather", refreshWeather, WEATHER_REFRESH_RATE, weatherCache.lastUpdateInMillis)
+    });
     updateUiFromCache();
   });
 });
@@ -23,39 +25,21 @@ function saveForecastCache() {
   chrome.storage.local.set({weatherCache: weatherCache});
 }
 
-const WEATHER_REFRESH_RATE = 10 * 60000
-
-function startWeatherRefreshing() {
-  refreshWeather();
-  setInterval(refreshWeather, WEATHER_REFRESH_RATE);
-}
-
 function refreshWeather() {
-  var now = new Date();
-  var lastUpdate = lastWeatherUpdate();
-  // Check if we should use the cached weather, using 0.9 in case we this is scheduled slightly early
-  if (now.getTime() - lastUpdate.getTime() > WEATHER_REFRESH_RATE * 0.9) {
-    console.log('Refreshing weather');
-    var weatherUndergroundKey = getKey("weather-underground");
-    if (weatherUndergroundKey) {
-      $.ajax({
-        url: "http://api.wunderground.com/api/" + weatherUndergroundKey + "/conditions/q/IN/46322.json"
-      })
-        .done(handleWeatherUndergroundConditionsResponse)
-        .fail(logAjaxError('weather underground conditions'));
-      $.ajax({
-        url: "http://api.wunderground.com/api/" + weatherUndergroundKey + "/hourly/q/IN/46322.json"
-      })
-        .done(handleWeatherUndergroundHourlyResponse)
-        .fail(logAjaxError('weather underground hourly'));
-    }
-  } else {
-    console.log('Skipping weather refresh, using cached values from ' + lastWeatherUpdate().toLocaleString());
+  console.log('Refreshing weather');
+  var weatherUndergroundKey = getKey("weather-underground");
+  if (weatherUndergroundKey) {
+    $.ajax({
+      url: "http://api.wunderground.com/api/" + weatherUndergroundKey + "/conditions/q/IN/46322.json"
+    })
+      .done(handleWeatherUndergroundConditionsResponse)
+      .fail(logAjaxError('weather underground conditions', updateUiFromCache));
+    $.ajax({
+      url: "http://api.wunderground.com/api/" + weatherUndergroundKey + "/hourly/q/IN/46322.json"
+    })
+      .done(handleWeatherUndergroundHourlyResponse)
+      .fail(logAjaxError('weather underground hourly', updateUiFromCache));
   }
-}
-
-function lastWeatherUpdate() {
-  return new Date(weatherCache.lastUpdateInMillis || 0);
 }
 
 function formatTemp(temp) {
