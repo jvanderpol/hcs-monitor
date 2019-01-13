@@ -4,13 +4,18 @@ window.addEventListener("load", function() {
   });
 });
 
-function logAjaxError(serviceName) {
+function logAjaxError(serviceName, cleanupFunction) {
   return function(jqXHR, textStatus, errorThrown) {
     console.error("Error calling " + serviceName +
       "\ntextStatus:" + textStatus +
       "\nerrorThrown: " + errorThrown +
       "\njqXHR.status: " + jqXHR.status +
       "\njqXHR.responseText: " + jqXHR.responseText);
+    if (cleanupFunction) {
+      cleanupFunction();
+    }
+  }
+}
 
 function scheduleSync(name, func, interval, lastSyncInMillis) {
   function invokeFunc() {
