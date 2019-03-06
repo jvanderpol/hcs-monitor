@@ -3,7 +3,7 @@
 
   "name": "HCS Monitor",
   "description": "Slideshow and info for the hallway monitor.",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "browser_action": {
     "default_title": "Start Monitor",
     "default_popup": "popup.html"
