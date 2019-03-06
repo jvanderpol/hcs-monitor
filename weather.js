@@ -110,18 +110,19 @@ function handleWeatherUndergroundHourlyResponse(response) {
       weatherCache.forecast[getDate(hour).getHours()] = hour;
     }
   }
-  for (const [hour, forecastHour] of Object.entries(weatherCache.forecast)) {
-    if (!isToday(forecastHour)) {
-      delete weatherCache.forecast[hour]
-    }
-  }
   saveForecastCache();
   updateUiFromCache();
 }
 
 function updateUiFromCache() {
   var timeInSeconds = new Date().getTime() / 1000;
-  var weatherTimeInSeconds = parseInt(weatherCache.current.observation_epoch);
+  var weatherTimeInSeconds;
+  if (weatherCache.current && weatherCache.current.observation_epoch) {
+    weatherTimeInSeconds = parseInt(weatherCache.current.observation_epoch);
+  } else  {
+    console.error("Unable to get current weather from " + weatherCache.current);
+    weatherTimeInSeconds = 0;
+  }
   if (timeInSeconds - weatherTimeInSeconds < MAX_WEATHER_AGE_TO_DISPLAY_IN_SECONDS) {
     document.getElementById('weather-current-temp').innerText = formatTemp(weatherCache.current.temp_f);
     updateWeatherIcon('weather-current-icon', weatherCache.current.icon, weatherCache.current.icon_url);
@@ -135,7 +136,19 @@ function updateUiFromCache() {
 }
 
 function updateRecess(forecastHours, hour, recessNumber) {
-  forecastHour = forecastHours[hour]
+  var forecastHour;
+  if (forecastHours) {
+    forecastHour = forecastHours[hour]
+    if (!forecastHour) {
+      console.error("No forecast for hour " + hour + " in " + forecastHours);
+    } else if (!isToday(forecastHour)) {
+      forecastHour = null;
+      console.error("Ignoring forecast which was not from today: " + forecastHour);
+    }
+  } else {
+    forecastHour = null;
+    console.error("Unable to get forecast from " + forecastHours);
+  }
   if (forecastHour) {
     temp = formatTemp(forecastHour.temp.english)
     icon = forecastHour.icon
