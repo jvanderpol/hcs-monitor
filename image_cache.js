@@ -167,7 +167,7 @@ function initFilesystem(successHandler) {
 }
 
 function syncHistoryLimit() {
-  return daysAgo(365 * 2);
+  return daysAgo(365);
 }
 
 function retainImageIds(retainedImageIds) {
