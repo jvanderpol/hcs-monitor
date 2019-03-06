@@ -11,6 +11,8 @@
   "icons": { "128": "icon128.png" },
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "http://*.wunderground.com/",
+    "https://*.facebook.com/"
   ]
 }
