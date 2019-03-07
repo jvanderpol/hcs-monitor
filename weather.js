@@ -25,23 +25,17 @@ function initForecastCache(callback) {
 }
 
 function saveForecastCache() {
-  chrome.storage.local.set({weatherCache: weatherCache});
 }
 
 function refreshWeather() {
   console.log('Refreshing weather');
-  var weatherUndergroundKey = getKey("weather-underground");
-  if (weatherUndergroundKey) {
+  var darkSkyKey = getKey("dark-sky");
+  if (darkSkyKey) {
     $.ajax({
-      url: "http://api.wunderground.com/api/" + weatherUndergroundKey + "/conditions/q/IN/46322.json"
+      url: "https://api.darksky.net/forecast/" + darkSkyKey + "/41.547540,-87.461620"
     })
-      .done(handleWeatherUndergroundConditionsResponse)
-      .fail(logAjaxError('weather underground conditions', updateUiFromCache));
-    $.ajax({
-      url: "http://api.wunderground.com/api/" + weatherUndergroundKey + "/hourly/q/IN/46322.json"
-    })
-      .done(handleWeatherUndergroundHourlyResponse)
-      .fail(logAjaxError('weather underground hourly', updateUiFromCache));
+      .done(handleDarkSkyResponse)
+      .fail(logAjaxError('dark sky forecast', updateUiFromCache));
   }
 }
 
@@ -50,52 +44,50 @@ function formatTemp(temp) {
 }
 
 var weatherIcons = {
-  'chanceflurries': 'chanceflurries',
-  'chancerain': 'chancerain',
-  'chancesleet': 'chancesleet',
-  'chancesnow': 'chancesnow',
-  'chancetstorms': 'chancetstorms',
-  'clear': 'clear',
-  'cloudy': 'cloudy',
-  'flurries': 'flurries',
-  'fog': 'fog',
-  'hazy': 'hazy',
-  'mostlycloudy': 'mostlycloudy',
-  'mostlysunny': 'mostlysunny',
-  'partlycloudy': 'partlycloudy',
-  'partlysunny': 'partlysunny',
+  'clear-day': 'clear',
+  'clear-night': 'clear',
   'rain': 'rain',
-  'sleet': 'sleet',
   'snow': 'snow',
-  'sunny': 'sunny',
-  'tstorms': 'tstorms'
+  'sleet': 'sleet',
+  'wind': 'clear',
+  'fog': 'fog',
+  'cloudy': 'cloudy',
+  'partly-cloudy-day': 'partlycloudy',
+  'partly-cloudy-night': 'partlycloudy'
 }
 
-function updateWeatherIcon(iconId, code, url) {
+function updateWeather(weatherData, iconId, tempId) {
   var iconElement = document.getElementById(iconId);
   if (iconElement) {
     var iconUrl;
-    if (weatherIcons[code]) {
-      iconUrl = 'weather-icons/icons/black/svg/' + weatherIcons[code] + '.svg';
-    } else if (url) {
-      iconUrl = url;
+    if (weatherData && weatherIcons[weatherData.icon]) {
+      iconUrl = 'weather-icons/icons/black/svg/' + weatherIcons[weatherData.icon] + '.svg';
     } else {
+      console.error('Unable to find weather icon in ' + weatherData);
       iconUrl = 'weather-icons/icons/black/svg/unknown.svg';
     }
     iconElement.src = iconUrl;
   }
+  var tempElement = document.getElementById(tempId)
+  if (tempElement) {
+    if (weatherData && weatherData.temperature) {
+      tempElement.innerText = formatTemp(weatherData.temperature);
+    } else {
+      tempElement.innerText = '?'
+    }
+  }
 }
 
-function handleWeatherUndergroundConditionsResponse(response) {
+function handleDarkSkyResponse(response) {
   weatherCache.lastUpdateInMillis = new Date().getTime();
-  weatherCache.current = response.current_observation
-  saveForecastCache();
+  weatherCache.darkSkyData = response
+  chrome.storage.local.set({weatherCache: weatherCache});
   updateUiFromCache();
 }
 
-function getDate(forecastHour) {
+function getDate(weatherData) {
   var date = new Date(0);
-  date.setUTCSeconds(forecastHour.FCTTIME.epoch);
+  date.setUTCSeconds(weatherData.time);
   return date;
 }
 
@@ -103,61 +95,39 @@ function isToday(forecastHour) {
   return getDate(forecastHour).getDate() == (new Date()).getDate();
 }
 
-function handleWeatherUndergroundHourlyResponse(response) {
-  for (var i = 0; i < response.hourly_forecast.length; i++) {
-    var hour = response.hourly_forecast[i];
-    if (isToday(hour)) {
-      weatherCache.forecast[getDate(hour).getHours()] = hour;
-    }
-  }
-  saveForecastCache();
-  updateUiFromCache();
-}
-
 function updateUiFromCache() {
   var timeInSeconds = new Date().getTime() / 1000;
   var weatherTimeInSeconds;
-  if (weatherCache.current && weatherCache.current.observation_epoch) {
-    weatherTimeInSeconds = parseInt(weatherCache.current.observation_epoch);
+  if (weatherCache.darkSkyData &&
+    weatherCache.darkSkyData.currently &&
+    weatherCache.darkSkyData.currently.time &&
+    timeInSeconds - weatherCache.darkSkyData.currently.time < MAX_WEATHER_AGE_TO_DISPLAY_IN_SECONDS) {
+    updateWeather(weatherCache.darkSkyData.currently, 'weather-current-icon', 'weather-current-temp');
   } else  {
-    console.error("Unable to get current weather from " + weatherCache.current);
-    weatherTimeInSeconds = 0;
+    console.error("Unable to get current weather from " + weatherCache);
+    updateWeather(null, 'weather-current-icon', 'weather-current-temp');
   }
-  if (timeInSeconds - weatherTimeInSeconds < MAX_WEATHER_AGE_TO_DISPLAY_IN_SECONDS) {
-    document.getElementById('weather-current-temp').innerText = formatTemp(weatherCache.current.temp_f);
-    updateWeatherIcon('weather-current-icon', weatherCache.current.icon, weatherCache.current.icon_url);
-  } else {
-    document.getElementById('weather-current-temp').innerText = "?";
-    updateWeatherIcon('weather-current-icon', -1, '');
-  }
-  updateRecess(weatherCache.forecast, 10, '1');
-  updateRecess(weatherCache.forecast, 12, '2');
-  updateRecess(weatherCache.forecast, 14, '3');
+  updateRecess(10, '1');
+  updateRecess(12, '2');
+  updateRecess(14, '3');
 }
 
-function updateRecess(forecastHours, hour, recessNumber) {
-  var forecastHour;
-  if (forecastHours) {
-    forecastHour = forecastHours[hour]
-    if (!forecastHour) {
-      console.error("No forecast for hour " + hour + " in " + forecastHours);
-    } else if (!isToday(forecastHour)) {
-      forecastHour = null;
-      console.error("Ignoring forecast which was not from today: " + forecastHour);
+function updateRecess(hour, recessNumber) {
+  var matchingHourData = null
+  if (weatherCache.darkSkyData && weatherCache.darkSkyData.hourly) {
+    for (var i = 0; i < weatherCache.darkSkyData.hourly.data.length; i++) {
+      var hourData = weatherCache.darkSkyData.hourly.data[i];
+      if (getDate(hourData).getHours() == hour && isToday(hourData)) {
+        matchingHourData = hourData;
+        break;
+      }
     }
-  } else {
-    forecastHour = null;
-    console.error("Unable to get forecast from " + forecastHours);
   }
-  if (forecastHour) {
-    temp = formatTemp(forecastHour.temp.english)
-    icon = forecastHour.icon
-    iconUrl = forecastHour.icon_url
-  } else {
-    temp = '?'
-    icon = -1
-    iconUrl = ''
+  if (!matchingHourData) {
+    console.error("No forecast for hour " + hour + " in " + weatherCache);
   }
-  document.getElementById('weather-recess-' + recessNumber + '-temp').innerText = temp;
-  updateWeatherIcon('weather-recess-' + recessNumber + '-icon', icon, iconUrl);
+  updateWeather(
+    matchingHourData,
+    'weather-recess-' + recessNumber + '-icon',
+    'weather-recess-' + recessNumber + '-temp');
 }

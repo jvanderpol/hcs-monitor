@@ -12,7 +12,7 @@
   "permissions": [
     "storage",
     "tabs",
-    "http://*.wunderground.com/",
+    "https://api.darksky.net/",
     "https://*.facebook.com/"
   ]
 }
