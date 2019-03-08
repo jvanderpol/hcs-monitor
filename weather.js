@@ -24,9 +24,6 @@ function initForecastCache(callback) {
   });
 }
 
-function saveForecastCache() {
-}
-
 function refreshWeather() {
   console.log('Refreshing weather');
   var darkSkyKey = getKey("dark-sky");
@@ -80,9 +77,26 @@ function updateWeather(weatherData, iconId, tempId) {
 
 function handleDarkSkyResponse(response) {
   weatherCache.lastUpdateInMillis = new Date().getTime();
-  weatherCache.darkSkyData = response
+  weatherCache.current = response.currently
+  updateForecast(response.hourly, weatherCache.forecast)
   chrome.storage.local.set({weatherCache: weatherCache});
   updateUiFromCache();
+}
+
+function updateForecast(hourly, forecast) {
+  if (hourly) {
+    for (var i = 0; i < hourly.data.length; i++) {
+      var hourData = hourly.data[i];
+      if (isToday(hourData)) {
+        forecast[getDate(hourData).getHours()] = hourData
+      }
+    }
+  }
+  for (const [hour, forecastHour] of Object.entries(forecast)) {
+    if (!isToday(forecastHour)) {
+      delete forecast[hour]
+    }
+  }
 }
 
 function getDate(weatherData) {
@@ -98,11 +112,10 @@ function isToday(forecastHour) {
 function updateUiFromCache() {
   var timeInSeconds = new Date().getTime() / 1000;
   var weatherTimeInSeconds;
-  if (weatherCache.darkSkyData &&
-    weatherCache.darkSkyData.currently &&
-    weatherCache.darkSkyData.currently.time &&
-    timeInSeconds - weatherCache.darkSkyData.currently.time < MAX_WEATHER_AGE_TO_DISPLAY_IN_SECONDS) {
-    updateWeather(weatherCache.darkSkyData.currently, 'weather-current-icon', 'weather-current-temp');
+  if (weatherCache.current &&
+    weatherCache.current.time &&
+    timeInSeconds - weatherCache.current.time < MAX_WEATHER_AGE_TO_DISPLAY_IN_SECONDS) {
+    updateWeather(weatherCache.current, 'weather-current-icon', 'weather-current-temp');
   } else  {
     console.error("Unable to get current weather from " + weatherCache);
     updateWeather(null, 'weather-current-icon', 'weather-current-temp');
@@ -113,21 +126,15 @@ function updateUiFromCache() {
 }
 
 function updateRecess(hour, recessNumber) {
-  var matchingHourData = null
-  if (weatherCache.darkSkyData && weatherCache.darkSkyData.hourly) {
-    for (var i = 0; i < weatherCache.darkSkyData.hourly.data.length; i++) {
-      var hourData = weatherCache.darkSkyData.hourly.data[i];
-      if (getDate(hourData).getHours() == hour && isToday(hourData)) {
-        matchingHourData = hourData;
-        break;
-      }
-    }
+  var hourData = weatherCache.forecast[hour];
+  if (hourData && !isToday(hourData)) {
+    hourData = null;
   }
-  if (!matchingHourData) {
-    console.error("No forecast for hour " + hour + " in " + weatherCache);
+  if (!hourData) {
+    console.error("No forecast for hour " + hour + " in " + weatherCache.forecast);
   }
   updateWeather(
-    matchingHourData,
+    hourData,
     'weather-recess-' + recessNumber + '-icon',
     'weather-recess-' + recessNumber + '-temp');
 }
