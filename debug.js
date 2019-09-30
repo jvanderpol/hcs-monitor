@@ -1,8 +1,6 @@
 window.addEventListener("load", function() {
   initApiKeys(function() {
-    initAndSyncImageCache(function() {
-      drawImageTable();
-    });
+    initAndSyncImageCache().then(drawImageTable);
   });
 });
 
@@ -15,36 +13,27 @@ function drawImageTable() {
     var image = imageCache.images[imageId];
     return Mustache.render(imageRowTemplate, {
       debugInfo: JSON.stringify(image, null, 2),
-      disabled: imageCache.disabledImageIds[imageId],
       imageId: imageId,
       imageUrl: image.url
     });
   }
-  buckettedImageCache.forEach(function(timeBucket) {
-    timeBucket.values.forEach(function(faceBucket) {
-      var weight = timeBucket.weight * faceBucket.weight;
-      var renderedBucket = Mustache.render(bucketRowTemplate, {
-        weight: weight,
-        timeBucketWeight: timeBucket.weight,
-        faceBucketWeight: faceBucket.weight,
-        imageCount: faceBucket.values.length
-      });
-      $('#imageTable').append(renderedBucket);
-      var renderedImageFromBuckets = 0;
-      var trimmedCount = 0;
-      faceBucket.values.forEach(function(imageId) {
-        if (renderedImageFromBuckets++ < 100) {
-          $('#imageTable').append(renderImageId(imageId));
-        } else {
-          trimmedCount++;
-        }
-      });
-      if (trimmedCount > 0) {
-        $('#imageTable').append("<tr><td>Trimmed " + trimmedCount + "</td></tr>")
-      }
+  for (let bucket of buckettedImageCache) {
+    var renderedBucket = Mustache.render(bucketRowTemplate, {
+      bucketWeight: bucket.weight,
+      imageCount: bucket.images.length
     });
-  });
-  Object.keys(imageCache.disabledImageIds).forEach(function(imageId) {
-      $('#imageTable').append(renderImageId(imageId));
-  });
+    $('#imageTable').append(renderedBucket);
+    var renderedImageFromBuckets = 0;
+    var trimmedCount = 0;
+    for (let imageId of bucket.images) {
+      if (renderedImageFromBuckets++ < 100) {
+        $('#imageTable').append(renderImageId(imageId));
+      } else {
+        trimmedCount++;
+      }
+    }
+    if (trimmedCount > 0) {
+      $('#imageTable').append("<tr><td>Trimmed " + trimmedCount + "</td></tr>")
+    }
+  }
 }

@@ -1,16 +1,17 @@
 $(window).on("load", function() {
-  initAndSyncImageCache(function() {
-    addNextSlide();
-  });
+  initAndSyncImageCache().then(addNextSlide);
 });
 
+function nonRecentlyShowsImageIds(imageIds) {
+  return imageIds.filter(imageId => !recentlyShownIds.includes(imageId));
+}
+
 function chooseBucket(buckets) {
-  var totalWeight = 0;
-  var passedWeight = 0;
-  buckets.forEach(function (bucket) { totalWeight += bucket.weight });
-  var rand = Math.random();
-  for (var i = 0; i < buckets.length; i++) {
-    var bucket = buckets[i];
+  let bucketsWithImages = buckets.filter(bucket => nonRecentlyShowsImageIds(bucket.images));
+  let totalWeight = bucketsWithImages.reduce((total, bucket) => total + bucket.weight, 0);
+  const rand = Math.random();
+  let passedWeight = 0;
+  for (let bucket of buckets) {
     passedWeight += bucket.weight;
     if (rand < passedWeight / totalWeight) {
       return bucket;
@@ -22,30 +23,18 @@ function chooseBucket(buckets) {
 var recentlyShownIds = [];
 
 function getNextImage() {
-  var nextImageId;
-  var maxRandomAttempts = 50;
-  // Just try 50 times to find an image we have not shown recently...
-  // not my proudest moment but it should work
-  for (var i = 0; i < maxRandomAttempts; i++) {
-    var bucketIndex = Math.random();
-    var firstBucket = chooseBucket(buckettedImageCache);
-    if (firstBucket) {
-      var secondBucket = chooseBucket(firstBucket.values);
-      if (secondBucket) {
-        var imageIndex = Math.floor(Math.random() * secondBucket.values.length);
-        nextImageId  = secondBucket.values[imageIndex];
-        if (!recentlyShownIds.includes(nextImageId)) {
-          break;
-        }
-      }
-    }
-    if (i == maxRandomAttempts - 1) {
-      console.error("Gave up and showing a recent image");
-    }
+  let bucket = chooseBucket(buckettedImageCache);
+  if (!bucket) {
+    recentlyShownIds = [];
+    console.error("Unable to find any buckets with showable pictures, resetting recentlyShownIds to see if that helps");
+    bucket = chooseBucket(buckettedImageCache);
   }
-  if (!nextImageId) {
+  if (!bucket) {
+    console.error("Unable to find any buckets with showable pictures");
     return null;
   }
+  const unshownImages = nonRecentlyShowsImageIds(bucket.images);
+  const nextImageId  = unshownImages[Math.floor(Math.random() * unshownImages.length)];
   recentlyShownIds.unshift(nextImageId);
   while (recentlyShownIds.length > 50) {
     recentlyShownIds.pop();

@@ -9,10 +9,20 @@
     "default_popup": "popup.html"
   },
   "icons": { "128": "icon128.png" },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz/jPSnGQvBdvhDO/FIYdbaKuNwvORgr2aCBqleBmweUSrhJmankQ/iZfGW+xPUsJvfFHL5Tvi3r39CwZLN69xY2Fx2AkcYnePKmSknXD1spl1/eLLID/oqYCmwNcMiupBDIKWg0Wyg0eHGDG7ZrcNHARoDAGvZib6SGVhMFAYMSYBHADhiPXMBy5RtWYXVzyvIxY0i8NEws57ybZWzq7BWchpryTh6dYJzm2WklNz7frZhhUo0biGM3LCOcLh20rLgAvGDl4sYlXI9ONaKtUMJeUw7M8fAWiq7wfjfUIMz4w6ehJWizF7VnFbtMpjUTBn3cIQpg4jQIgDxKfXa/OiwIDAQAB",
+  "oauth2": {
+    "client_id": "964546962817-001q05m15l0tvk5073d1oohskvgq3nb2.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.metadata.readonly"
+    ]
+  },
   "permissions": [
+    "identity",
     "storage",
     "tabs",
     "https://api.darksky.net/",
-    "https://*.facebook.com/"
+    "https://*.facebook.com/",
+    "https://*.google.com/",
+    "https://*.googleusercontent.com/"
   ]
 }
