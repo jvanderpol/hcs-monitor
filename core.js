@@ -17,11 +17,22 @@ function logAjaxError(serviceName, cleanupFunction) {
   }
 }
 
+const scheduledSyncs = new Map();
+
 function scheduleSync(name, func, interval, lastSyncInMillis) {
+  const previousSync = scheduledSyncs.get(name);
+  if (previousSync) {
+    clearTimeout(name);
+    scheduledSyncs.delete(name);
+  }
+  function setTimeoutAndTrack() {
+    const scheduled = setTimeout(invokeFunc, interval);
+    scheduledSyncs.set(name, scheduled)
+  };
   function invokeFunc() {
     func();
-    setTimeout(invokeFunc, interval);
-  }
+    setTimeoutAndTrack();
+  };
   var now = new Date();
   var lastSync = new Date(lastSyncInMillis || 0);
   var timeSinceLastSync = now.getTime() - lastSync.getTime();
@@ -32,6 +43,6 @@ function scheduleSync(name, func, interval, lastSyncInMillis) {
     console.log("Delaying '" + name + "' sync by " +
       (Math.round(delay / 1000 / 60 * 10) / 10) +
       " minutes due to recent sync at " + lastSync.toLocaleString());
-    setTimeout(invokeFunc, delay)
+    setTimeoutAndTrack();
   }
 }
