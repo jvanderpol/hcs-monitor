@@ -7,11 +7,11 @@ function nonRecentlyShowsImageIds(imageIds) {
 }
 
 function chooseBucket(buckets) {
-  let bucketsWithImages = buckets.filter(bucket => nonRecentlyShowsImageIds(bucket.images));
+  let bucketsWithImages = buckets.filter(bucket => nonRecentlyShowsImageIds(bucket.images).length > 0);
   let totalWeight = bucketsWithImages.reduce((total, bucket) => total + bucket.weight, 0);
   const rand = Math.random();
   let passedWeight = 0;
-  for (let bucket of buckets) {
+  for (let bucket of bucketsWithImages) {
     passedWeight += bucket.weight;
     if (rand < passedWeight / totalWeight) {
       return bucket;
