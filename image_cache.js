@@ -259,6 +259,7 @@ function maybeDownload(url, fileId) {
 }
 
 function download(url, fileId) {
+  console.log('Downloading ' + url);
   return new Promise(function (resolve, reject) {
     let xhr = new XMLHttpRequest();
     xhr.open('GET', url);
