@@ -1,4 +1,12 @@
 const CURRENT_IMAGE_CACHE_VERSION = "0.1";
+const NEW_IMAGE_FIELDS = [
+  'id',
+  'webContentLink',
+  'imageMediaMetadata/height',
+  'imageMediaMetadata/width',
+  'imageMediaMetadata/time'
+];
+
 let buckettedImageCache = [];
 let imageCache = {};
 let filesystem = null;
@@ -36,11 +44,10 @@ async function googleApiCall(options) {
 }
 
 function scheduleSyncs() {
-  // Every 30 minutes
-  scheduleSync("new images", syncNewPictures, 1000 * 60 * 30, imageCache.lastSyncInMillis);
-  syncNewPictures();
+  // Every 10 minutes
+  scheduleSync("new images", syncNewPictures, 1000 * 60 * 10, imageCache.lastSyncInMillis);
   // Every 2 hours
-  // scheduleSync("trim images", trimRemovedPictures, 1000 * 60 * 60 * 2, imageCache.lastTrimSyncInMillis);
+  scheduleSync("trim images", trimRemovedPictures, 1000 * 60 * 60 * 2, imageCache.lastTrimSyncInMillis);
 }
 
 async function initGoogleToken() {
@@ -160,51 +167,23 @@ function syncHistoryLimit() {
 
 function retainImageIds(retainedImageIds) {
   let toDelete = Object.keys(imageCache.images).filter(
-    function(imageId) { return !(imageId in retainedImageIds) }
+    imageId => !retainedImageIds.includes(imageId)
   );
-  console.log("trimming: " + toDelete);
+  console.log("trimming: " + (toDelete.join(', ') || 'nothing'));
   toDelete.forEach(function(id) { delete imageCache.images[id] });
   imageCache.lastTrimSyncInMillis = new Date().getTime();
   saveImageCache();
 }
 
-function trimRemovedPictures() {
+async function trimRemovedPictures() {
   console.log("trimming removed pictures");
-  facebookGraphCall({path:'/140475252639971/photos/uploaded', fields:'images,created_time,name'}, handleImageResponseForTrim);
-  retainedImageIds = {}
-  function handleImageResponseForTrim(response) {
-    let nextPageToRequest = response.paging && response.paging.next
-    let requestNextPage = true;
-    for (let i = 0; i < response.data.length; i++) {
-      let image = response.data[i];
-      if (new Date(image.created_time) < syncHistoryLimit()) {
-        retainImageIds(retainedImageIds);
-        requestNextPage = false;
-        break;
-      } else {
-        retainedImageIds[image.id] = true;
-      }
-    }
-    if (nextPageToRequest && requestNextPage) {
-      let lastDate = "empty";
-      if (response.data.length > 0) {
-        lastDate = response.data[response.data.length - 1].created_time;
-      }
-      console.log("Fetching nextPage for trim, last image date: " + lastDate);
-      facebookGraphCall({url:nextPageToRequest}, handleImageResponseForTrim);
-    }
-  }
-}
-
-async function syncNewPictures() {
-  console.log("syncing new pictures");
   let nextPageToken = null;
   let files = [];
   do {
     const filesResponse = await googleApiCall({
       path: '/drive/v3/files',
       params: {
-        fields: '*',
+        fields: 'nextPageToken,files(id)',
         q: '"1BR7F53bfHQi0RUDKDtkp28_nEOVHchu_" in parents',
         pageToken: nextPageToken || ''
       }
@@ -212,6 +191,30 @@ async function syncNewPictures() {
     // Spread operator ...
     files.push(...filesResponse.files);
     nextPageToken = filesResponse.nextPageToken;
+  } while (nextPageToken);
+
+  retainImageIds(files.map(file => file.id));
+}
+
+async function syncNewPictures() {
+  console.log("syncing new pictures");
+  let nextPageToken = null;
+  let files = [];
+  let oldestFile = null;
+  do {
+    const filesResponse = await googleApiCall({
+      path: '/drive/v3/files',
+      params: {
+        fields: 'nextPageToken,files(' + NEW_IMAGE_FIELDS.join(',') + ')',
+        q: '"1BR7F53bfHQi0RUDKDtkp28_nEOVHchu_" in parents',
+        orderBy: 'createdTime',
+        pageToken: nextPageToken || ''
+      }
+    });
+    // Spread operator ...
+    files.push(...filesResponse.files);
+    nextPageToken = filesResponse.nextPageToken;
+    oldestFile = files[files.length - 1];
   } while (nextPageToken);
   await Promise.all(files.map(file => ensureImageCached(file)));
   imageCache.lastSyncInMillis = new Date().getTime();
